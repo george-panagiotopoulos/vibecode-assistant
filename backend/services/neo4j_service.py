@@ -524,6 +524,64 @@ class Neo4jService:
             logger.error(f"Error getting saved graphs: {e}")
             raise
 
+    def get_saved_graph_data(self, graph_name: str) -> Dict[str, Any]:
+        """Get saved graph data without loading it into the main graph"""
+        if not self.driver:
+            raise Exception("Neo4j connection not available")
+        
+        try:
+            with self.driver.session() as session:
+                # Check if the saved graph exists
+                check_query = """
+                MATCH (sg:SavedGraph {name: $graph_name})
+                RETURN count(sg) as count
+                """
+                result = session.run(check_query, {'graph_name': graph_name})
+                if result.single()['count'] == 0:
+                    return None
+                
+                # Get saved nodes
+                nodes_query = """
+                MATCH (sn:SavedNode {graph_name: $graph_name})
+                RETURN sn.id as id, sn.name as name, sn.description as description,
+                       sn.layer as layer, sn.type as type
+                """
+                
+                nodes_result = session.run(nodes_query, {'graph_name': graph_name})
+                nodes = []
+                for record in nodes_result:
+                    nodes.append({
+                        'id': record['id'],
+                        'name': record['name'],
+                        'description': record['description'],
+                        'layer': record['layer'],
+                        'type': record['type']
+                    })
+                
+                # Get saved edges
+                edges_query = """
+                MATCH (se:SavedEdge {graph_name: $graph_name})
+                RETURN se.from_id as from_id, se.to_id as to_id, se.type as type
+                """
+                
+                edges_result = session.run(edges_query, {'graph_name': graph_name})
+                edges = []
+                for record in edges_result:
+                    edges.append({
+                        'from_id': record['from_id'],
+                        'to_id': record['to_id'],
+                        'type': record['type']
+                    })
+                
+                return {
+                    'nodes': nodes,
+                    'edges': edges
+                }
+                
+        except Exception as e:
+            logger.error(f"Error getting saved graph data '{graph_name}': {e}")
+            raise
+
     def load_graph(self, graph_name: str) -> bool:
         """Load a saved graph by name"""
         if not self.driver:

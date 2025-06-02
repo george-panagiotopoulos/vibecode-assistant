@@ -883,6 +883,27 @@ def get_saved_graphs():
         logger.error(f"Error getting saved graphs: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/api/graph/saved/<graph_name>/data', methods=['GET'])
+def get_saved_graph_data(graph_name):
+    """Get saved graph data without loading it into the main graph"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        graph_data = neo4j_service.get_saved_graph_data(graph_name)
+        
+        if graph_data:
+            return jsonify({
+                "success": True,
+                "data": graph_data
+            })
+        else:
+            return jsonify({"success": False, "error": f"Graph '{graph_name}' not found"}), 404
+            
+    except Exception as e:
+        logger.error(f"Error getting saved graph data: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/api/graph/load/<graph_name>', methods=['POST'])
 def load_graph(graph_name):
     """Load a saved graph by name"""

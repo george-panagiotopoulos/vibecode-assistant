@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import loggingService from '../services/LoggingService';
 import ApiService from '../services/ApiService';
+import NFRLoader from './NFRLoader';
 
 const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
   const [prompt, setPrompt] = useState('');
-  const [taskType, setTaskType] = useState('development');
   const [includeContext, setIncludeContext] = useState(true);
   const [includeRequirements, setIncludeRequirements] = useState(true);
   const [enhancedSpecification, setEnhancedSpecification] = useState('');
@@ -12,31 +12,19 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [enhancementMetadata, setEnhancementMetadata] = useState(null);
   const [currentEnhancementType, setCurrentEnhancementType] = useState('');
-
-  const taskTypes = [
-    { value: 'development', label: 'Development', icon: '💻' },
-    { value: 'refactoring', label: 'Refactoring', icon: '🔧' },
-    { value: 'testing', label: 'Testing', icon: '🧪' },
-    { value: 'documentation', label: 'Documentation', icon: '📝' },
-    { value: 'review', label: 'Code Review', icon: '👀' }
-  ];
-
-  useEffect(() => {
-    if (config?.preferences?.default_task_type) {
-      setTaskType(config.preferences.default_task_type);
-    }
-  }, [config]);
+  const [nfrLoaderOpen, setNfrLoaderOpen] = useState(false);
+  const [selectedNFRs, setSelectedNFRs] = useState([]);
 
   const getSystemPrompt = (enhancementType) => {
     switch (enhancementType) {
       case 'full_specification':
-        return `You are an expert AI coding assistant. Transform the user's request into a comprehensive Business Requirements Specification for ${taskType} projects. Provide detailed, actionable specifications that serve as complete Business Requirements Documents.`;
+        return `You are an expert AI coding assistant. Transform the user's request into a comprehensive Business Requirements Specification for development projects. Provide detailed, actionable specifications that serve as complete Business Requirements Documents.`;
       case 'plan':
-        return `You are an expert AI coding assistant. Create a step-by-step implementation plan for the user's request. The plan should be clear, actionable, and no more than 500 words. Focus on the key steps needed to implement the ${taskType} task effectively.`;
+        return `You are an expert AI coding assistant. Create a step-by-step implementation plan for the user's request. The plan should be clear, actionable, and no more than 500 words. Focus on the key steps needed to implement the development task effectively.`;
       case 'clarity':
         return `You are an expert AI coding assistant. Improve the clarity and language of the user's prompt without adding new details or requirements. Make the prompt clearer, more precise, and better structured while maintaining the original intent and scope.`;
       default:
-        return `You are an expert AI coding assistant. Transform the user's request into a comprehensive Business Requirements Specification for ${taskType} projects.`;
+        return `You are an expert AI coding assistant. Transform the user's request into a comprehensive Business Requirements Specification for development projects.`;
     }
   };
 
@@ -53,17 +41,25 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
     
     loggingService.logInfo(`Starting ${enhancementType} enhancement in PromptBuilder`, {
       promptLength: prompt.length,
-      taskType,
       selectedFilesCount: selectedFiles.length,
-      enhancementType
+      enhancementType,
+      nfrCount: selectedNFRs.length
     });
 
     try {
       const systemPrompt = getSystemPrompt(enhancementType);
       const maxTokens = enhancementType === 'plan' ? 1000 : 4000; // Limit tokens for plan to ensure 500 words or less
       
+      // Build the enhanced prompt with NFRs if selected
+      let enhancedPrompt = prompt;
+      if (selectedNFRs.length > 0) {
+        const nfrSection = '\n\nNon-Functional Requirements:\n' + 
+          selectedNFRs.map(nfr => `- ${nfr.name}: ${nfr.description}`).join('\n');
+        enhancedPrompt += nfrSection;
+      }
+      
       // Use streaming for the response
-      await ApiService.streamResponse(prompt, {
+      await ApiService.streamResponse(enhancedPrompt, {
         systemPrompt,
         maxTokens,
         temperature: 0.3,
@@ -80,15 +76,15 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
           setEnhancedSpecification(errorMsg);
           loggingService.logError('streaming_enhancement_error', error.message, {
             prompt: prompt.substring(0, 100) + '...',
-            taskType,
             selectedFilesCount: selectedFiles.length,
-            enhancementType
+            enhancementType,
+            nfrCount: selectedNFRs.length
           });
         }
       });
 
       // Also call the original enhancement for logs
-      const response = await onPromptEnhancement(prompt, taskType, selectedFiles);
+      const response = await onPromptEnhancement(enhancedPrompt, 'development', selectedFiles);
       if (response && response.metadata) {
         setEnhancementMetadata(response.metadata);
       }
@@ -101,9 +97,9 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
       setIsStreaming(false);
       loggingService.logError('enhancement_exception', error.message, {
         prompt: prompt.substring(0, 100) + '...',
-        taskType,
         selectedFilesCount: selectedFiles.length,
         enhancementType,
+        nfrCount: selectedNFRs.length,
         error: error.toString(),
         stack: error.stack
       });
@@ -120,11 +116,6 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
       console.error('Failed to copy to clipboard:', error);
       loggingService.logError('clipboard_copy', error.message);
     }
-  };
-
-  const getTaskIcon = (type) => {
-    const task = taskTypes.find(t => t.value === type);
-    return task ? task.icon : '💻';
   };
 
   const getSelectedFilesPreview = () => {
@@ -146,6 +137,18 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
     }
   };
 
+  const handleNFRSelection = (nodes) => {
+    setSelectedNFRs(nodes);
+    loggingService.logInfo('NFR nodes selected for prompt', {
+      nodeCount: nodes.length,
+      nodeNames: nodes.map(n => n.name)
+    });
+  };
+
+  const removeNFR = (nodeId) => {
+    setSelectedNFRs(prev => prev.filter(nfr => nfr.id !== nodeId));
+  };
+
   return (
     <div className="h-full flex flex-col bg-vibe-dark">
       {/* Header */}
@@ -156,19 +159,14 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-vibe-gray mb-2">
-              Task Type
+              NFR Requirements
             </label>
-            <select
-              value={taskType}
-              onChange={(e) => setTaskType(e.target.value)}
-              className="input-primary w-full"
+            <button
+              onClick={() => setNfrLoaderOpen(true)}
+              className="btn-primary w-full"
             >
-              {taskTypes.map((type) => (
-                <option key={type.value} value={type.value}>
-                  {type.icon} {type.label}
-                </option>
-              ))}
-            </select>
+              📋 Load NFR ({selectedNFRs.length})
+            </button>
           </div>
 
           <div>
@@ -208,6 +206,34 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
             </div>
           </div>
         </div>
+
+        {/* Selected NFRs Display */}
+        {selectedNFRs.length > 0 && (
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-vibe-gray mb-2">
+              Selected NFR Requirements ({selectedNFRs.length})
+            </label>
+            <div className="panel p-3 max-h-32 overflow-y-auto">
+              <div className="space-y-2">
+                {selectedNFRs.map((nfr) => (
+                  <div key={nfr.id} className="flex items-start justify-between text-sm">
+                    <div className="flex-1">
+                      <div className="font-medium text-vibe-gray">{nfr.name}</div>
+                      <div className="text-vibe-gray opacity-60 text-xs">{nfr.description}</div>
+                    </div>
+                    <button
+                      onClick={() => removeNFR(nfr.id)}
+                      className="text-vibe-red hover:text-red-400 ml-2"
+                      title="Remove NFR"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Content */}
@@ -216,7 +242,7 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
         <div className="flex-1 flex flex-col">
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-medium text-vibe-gray">
-              {getTaskIcon(taskType)} Your Prompt
+              Your Prompt
             </label>
             <div className="text-xs text-vibe-gray opacity-60">
               {prompt.length} characters
@@ -225,7 +251,7 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder={`Describe what you want to ${taskType === 'development' ? 'build' : taskType === 'refactoring' ? 'refactor' : taskType === 'testing' ? 'test' : 'do'}...`}
+            placeholder={`Describe what you want to build...`}
             className="flex-1 input-primary resize-none font-mono text-sm"
             style={{ minHeight: '200px' }}
           />
@@ -318,6 +344,13 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
           </div>
         )}
       </div>
+
+      {/* NFR Loader Modal */}
+      <NFRLoader
+        isOpen={nfrLoaderOpen}
+        onClose={() => setNfrLoaderOpen(false)}
+        onNodesSelected={handleNFRSelection}
+      />
     </div>
   );
 };

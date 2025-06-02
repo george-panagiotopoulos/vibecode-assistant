@@ -287,6 +287,41 @@ export const ApiService = {
     return response.data;
   },
 
+  // Neo4j Graph operations
+  async getSavedGraphs() {
+    const response = await api.get('/api/graph/saved');
+    return response.data;
+  },
+
+  async getGraphData(graphName) {
+    // This method gets the saved graph data without loading it into the main graph
+    const response = await api.get(`/api/graph/saved/${graphName}/data`);
+    return response.data;
+  },
+
+  async loadGraph(graphName) {
+    const response = await api.post(`/api/graph/load/${graphName}`);
+    return response.data;
+  },
+
+  async saveGraph(graphName, graphData) {
+    const response = await api.post('/api/graph/save', {
+      graph_name: graphName,
+      graph_data: graphData
+    });
+    return response.data;
+  },
+
+  async deleteGraph(graphName) {
+    const response = await api.delete(`/api/graph/saved/${graphName}`);
+    return response.data;
+  },
+
+  async getGraphNodes() {
+    const response = await api.get('/api/graph/nodes');
+    return response.data;
+  },
+
   // Utility methods
   validateGitHubUrl(url) {
     const githubRegex = /^https:\/\/github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/?$/;
