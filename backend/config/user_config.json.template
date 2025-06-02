@@ -1,0 +1,71 @@
+{
+  "prompt_enhancement": {
+    "enabled": true,
+    "style": "professional",
+    "include_context": true,
+    "max_length": 2000
+  },
+  "file_processing": {
+    "max_file_size": 10485760,
+    "allowed_extensions": [
+      ".py",
+      ".js",
+      ".jsx",
+      ".ts",
+      ".tsx",
+      ".html",
+      ".css",
+      ".scss",
+      ".json",
+      ".md",
+      ".txt",
+      ".yml",
+      ".yaml",
+      ".xml",
+      ".sql",
+      ".sh",
+      ".bat",
+      ".ps1",
+      ".php",
+      ".rb",
+      ".go",
+      ".rs",
+      ".cpp",
+      ".c",
+      ".h",
+      ".java",
+      ".kt",
+      ".swift",
+      ".dart",
+      ".vue",
+      ".svelte"
+    ],
+    "exclude_patterns": [
+      "node_modules/**",
+      ".git/**",
+      "*.log",
+      "*.tmp",
+      "__pycache__/**",
+      "*.pyc",
+      ".env*",
+      "dist/**",
+      "build/**"
+    ]
+  },
+  "ui": {
+    "theme": "dark",
+    "auto_save": true,
+    "show_line_numbers": true,
+    "word_wrap": true
+  },
+  "aws": {
+    "access_key_id": "YOUR_AWS_ACCESS_KEY_ID",
+    "bedrock_model_id": "anthropic.claude-3-5-sonnet-20240620-v1:0",
+    "region": "us-east-1",
+    "secret_access_key": "YOUR_AWS_SECRET_ACCESS_KEY"
+  },
+  "github": {
+    "default_repo": "https://github.com/your-username/your-repo",
+    "token": "YOUR_GITHUB_TOKEN"
+  }
+} 

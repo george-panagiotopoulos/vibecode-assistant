@@ -1,0 +1,30 @@
+{
+  "name": "vibe-assistant",
+  "version": "1.0.0",
+  "description": "AI-powered prompt builder for developers with React frontend and Python backend",
+  "private": true,
+  "scripts": {
+    "install": "cd frontend && npm install",
+    "start": "./scripts/start.sh",
+    "start:frontend": "cd frontend && npm start",
+    "start:backend": "cd backend && python3 app.py",
+    "build": "cd frontend && npm run build",
+    "test": "cd frontend && npm run test",
+    "test:backend": "cd scripts/tests && python -m pytest",
+    "dev": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "setup": "cd backend && pip install -r requirements.txt && cd ../frontend && npm install"
+  },
+  "keywords": [
+    "ai",
+    "coding-assistant",
+    "prompt-builder",
+    "react",
+    "python",
+    "flask"
+  ],
+  "author": "Vibe Assistant Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

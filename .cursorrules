@@ -1,0 +1,107 @@
+# Vibe Assistant - Project Structure & Coding Standards
+
+## Project Overview
+Vibe Assistant is an AI-powered prompt builder for developers with a React frontend and Python Flask backend.
+
+## Directory Structure
+```
+vibe-assistant/
+├── backend/                    # Python Flask backend
+│   ├── app.py                 # Main Flask application
+│   ├── config/                # Backend configuration
+│   ├── services/              # Backend services
+│   └── requirements.txt       # Python dependencies
+├── frontend/                  # React frontend application
+│   ├── src/                   # React source code
+│   │   ├── components/        # React components
+│   │   ├── services/          # Frontend services
+│   │   └── App.js            # Main React app
+│   ├── public/               # Static assets
+│   ├── node_modules/         # NPM packages (auto-generated)
+│   ├── package.json         # Frontend dependencies
+│   ├── package-lock.json    # Dependency lock file
+│   ├── tailwind.config.js    # Tailwind CSS configuration
+│   └── postcss.config.js     # PostCSS configuration
+├── config/                   # Application configuration files
+│   └── user_config.json     # User configuration
+├── scripts/                  # Build and utility scripts
+│   ├── start.sh             # Application startup script
+│   └── tests/               # Test files
+├── logs/                     # Application logs
+├── .env                      # Environment variables (not in git)
+├── .env.example             # Environment template
+├── package.json             # Root package.json for scripts
+└── README.md                # Project documentation
+```
+
+## Coding Standards
+
+### Frontend (React/JavaScript)
+- Use functional components with hooks
+- Follow React best practices
+- Use Tailwind CSS for styling with custom vibe-* color classes
+- Import paths should be relative within frontend directory
+- Component files should be in PascalCase
+- Service files should be in camelCase
+
+### Backend (Python/Flask)
+- Follow PEP 8 style guidelines
+- Use type hints where appropriate
+- Services should be in separate modules
+- Use proper error handling and logging
+- Configuration should be environment-based
+
+### File Organization Rules
+1. **Frontend files** must be in `/frontend/` directory
+2. **Backend files** must be in `/backend/` directory
+3. **Scripts** must be in `/scripts/` directory
+4. **Configuration** must be in `/config/` directory
+5. **Never** place frontend files in backend directory or vice versa
+
+### Import Guidelines
+- Frontend: Use relative imports within frontend directory
+- Backend: Use relative imports within backend directory
+- No cross-directory imports between frontend and backend
+
+### Color Scheme (Tailwind)
+Use the custom vibe color palette:
+- `vibe-dark`: #1e1e1e (main background)
+- `vibe-darker`: #252526 (secondary background)
+- `vibe-darkest`: #1a1a1a (deepest background)
+- `vibe-blue`: #007acc (primary accent)
+- `vibe-gray`: #cccccc (text)
+- `vibe-gray-dark`: #3c3c3c (borders)
+- `vibe-green`: #4caf50 (success)
+- `vibe-red`: #f44336 (error)
+
+### Scripts Usage
+- `npm run start`: Start both frontend and backend
+- `npm run start:frontend`: Start only frontend
+- `npm run start:backend`: Start only backend
+- `npm run build`: Build frontend for production
+- `npm run setup`: Install all dependencies
+
+### Environment Variables
+Required environment variables (see .env.example):
+- AWS_ACCESS_KEY_ID
+- AWS_SECRET_ACCESS_KEY
+- AWS_DEFAULT_REGION
+- AWS_BEDROCK_MODEL_ID
+- GITHUB_TOKEN
+- GITHUB_DEFAULT_REPO
+
+## Development Workflow
+1. Always maintain the directory structure
+2. Test changes after modifications
+3. Use the provided scripts for starting services
+4. Follow the established import patterns
+5. Maintain separation between frontend and backend concerns
+
+## When Making Changes
+- **Frontend changes**: Only modify files in `/frontend/`
+- **Backend changes**: Only modify files in `/backend/`
+- **Configuration**: Use `/config/` for app config, `.env` for secrets
+- **Scripts**: Add new scripts to `/scripts/`
+- **Dependencies**: Frontend deps in `/frontend/package.json`, backend in `/backend/requirements.txt`
+
+This structure ensures clean separation of concerns and maintainable code organization. 
