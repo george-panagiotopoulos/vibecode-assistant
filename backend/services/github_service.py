@@ -65,7 +65,8 @@ class GitHubService:
                     "full_name": repo.full_name,
                     "description": repo.description,
                     "default_branch": branch,
-                    "languages": list(repo.get_languages().keys())
+                    "languages": list(repo.get_languages().keys()),
+                    "html_url": repo.html_url
                 }
             }
         except Exception as e:
@@ -129,6 +130,46 @@ class GitHubService:
         except Exception as e:
             logger.error(f"Error getting file content: {str(e)}")
             raise Exception(f"Failed to get file content: {str(e)}")
+    
+    def get_folder_contents(self, repo_url, folder_path, branch=None):
+        """Get contents of a specific folder"""
+        try:
+            owner, repo_name = self.parse_repo_url(repo_url)
+            repo = self.github.get_repo(f"{owner}/{repo_name}")
+            
+            if not branch:
+                branch = repo.default_branch
+            
+            # Handle root directory (empty folder_path)
+            if not folder_path or folder_path == '':
+                contents = repo.get_contents("", ref=branch)
+            else:
+                contents = repo.get_contents(folder_path, ref=branch)
+            
+            # Build file list for this folder
+            folder_contents = []
+            for content in contents:
+                node = {
+                    "name": content.name,
+                    "path": content.path,
+                    "type": content.type,
+                    "size": content.size if hasattr(content, 'size') else None,
+                    "sha": content.sha
+                }
+                
+                if content.type == "dir":
+                    node["children"] = []  # Will be loaded on demand
+                    node["isExpanded"] = False
+                
+                folder_contents.append(node)
+            
+            # Sort: directories first, then files, both alphabetically
+            folder_contents.sort(key=lambda x: (x["type"] != "dir", x["name"].lower()))
+            return folder_contents
+            
+        except Exception as e:
+            logger.error(f"Error getting folder contents: {str(e)}")
+            raise Exception(f"Failed to get folder contents: {str(e)}")
     
     def search_files(self, repo_url, query, file_extensions=None):
         """Search for files in repository based on name or content"""

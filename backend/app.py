@@ -246,11 +246,32 @@ def get_file_content():
         if not repo_url or not file_path:
             return jsonify({"success": False, "error": "Repository URL and file path are required"}), 400
         
-        content = github_service.get_file_content(repo_url, file_path, github_token)
+        github_service.set_token(github_token)
+        content = github_service.get_file_content(repo_url, file_path)
         
         return jsonify({"success": True, "content": content})
     except Exception as e:
         logger.error(f"Error getting file content: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/repositories/folder-contents', methods=['POST'])
+def get_folder_contents():
+    """Get contents of a specific folder from repository"""
+    try:
+        data = request.json
+        repo_url = data.get('repo_url')
+        folder_path = data.get('folder_path', '')  # Default to empty string for root
+        github_token = data.get('github_token') or os.environ.get('GITHUB_TOKEN')
+        
+        if not repo_url:
+            return jsonify({"success": False, "error": "Repository URL is required"}), 400
+        
+        github_service.set_token(github_token)
+        contents = github_service.get_folder_contents(repo_url, folder_path)
+        
+        return jsonify({"success": True, "contents": contents})
+    except Exception as e:
+        logger.error(f"Error getting folder contents: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/requirements', methods=['GET', 'POST'])
@@ -624,6 +645,45 @@ def handle_graph_nodes():
             logger.error(f"Error creating graph node: {str(e)}")
             return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/api/graph/layers', methods=['GET', 'POST'])
+def handle_custom_layers():
+    """Handle layers - GET all layers, POST create new layer"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    if request.method == 'GET':
+        try:
+            all_layers = neo4j_service.get_all_layers()
+            return jsonify({"success": True, "layers": all_layers})
+        except Exception as e:
+            logger.error(f"Error getting layers: {str(e)}")
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    elif request.method == 'POST':
+        try:
+            layer_data = request.json
+            
+            # Validate required fields
+            if not layer_data or 'name' not in layer_data:
+                return jsonify({"success": False, "error": "Layer name is required"}), 400
+            
+            layer_name = layer_data['name'].strip()
+            layer_description = layer_data.get('description', '')
+            
+            if not layer_name:
+                return jsonify({"success": False, "error": "Layer name cannot be empty"}), 400
+            
+            # Check if layer already exists
+            existing_layers = neo4j_service.get_all_layers()
+            if layer_name in existing_layers:
+                return jsonify({"success": False, "error": "Layer already exists"}), 400
+            
+            created_layer = neo4j_service.create_custom_layer(layer_name, layer_description)
+            return jsonify({"success": True, "layer": created_layer})
+        except Exception as e:
+            logger.error(f"Error creating custom layer: {str(e)}")
+            return jsonify({"success": False, "error": str(e)}), 500
+
 @app.route('/api/graph/edges', methods=['POST'])
 def create_graph_edge():
     """Create an edge between two nodes"""
@@ -773,6 +833,104 @@ def test_aws_connection():
             'success': False,
             'error': f'AWS connection failed: {str(e)}'
         })
+
+@app.route('/api/graph/save', methods=['POST'])
+def save_graph():
+    """Save current graph with a name"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        data = request.get_json()
+        graph_name = data.get('graph_name')
+        
+        if not graph_name or not graph_name.strip():
+            return jsonify({"success": False, "error": "Graph name is required"}), 400
+        
+        # Get current graph data
+        graph_data = neo4j_service.get_all_nodes_and_edges()
+        
+        if not graph_data['nodes']:
+            return jsonify({"success": False, "error": "No graph data to save"}), 400
+        
+        # Save the graph
+        success = neo4j_service.save_graph(graph_name.strip(), graph_data)
+        
+        if success:
+            return jsonify({
+                "success": True, 
+                "message": f"Graph '{graph_name}' saved successfully",
+                "nodes_count": len(graph_data['nodes']),
+                "edges_count": len(graph_data['edges'])
+            })
+        else:
+            return jsonify({"success": False, "error": "Failed to save graph"}), 500
+            
+    except Exception as e:
+        logger.error(f"Error saving graph: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/saved', methods=['GET'])
+def get_saved_graphs():
+    """Get list of all saved graphs"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        saved_graphs = neo4j_service.get_saved_graphs()
+        return jsonify({"success": True, "graphs": saved_graphs})
+    except Exception as e:
+        logger.error(f"Error getting saved graphs: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/load/<graph_name>', methods=['POST'])
+def load_graph(graph_name):
+    """Load a saved graph by name"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        # Clear current graph first
+        neo4j_service.clear_all_data()
+        
+        # Load the saved graph
+        success = neo4j_service.load_graph(graph_name)
+        
+        if success:
+            # Get the loaded data to return
+            graph_data = neo4j_service.get_all_nodes_and_edges()
+            return jsonify({
+                "success": True, 
+                "message": f"Graph '{graph_name}' loaded successfully",
+                "data": graph_data
+            })
+        else:
+            return jsonify({"success": False, "error": f"Graph '{graph_name}' not found"}), 404
+            
+    except Exception as e:
+        logger.error(f"Error loading graph: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/saved/<graph_name>', methods=['DELETE'])
+def delete_saved_graph(graph_name):
+    """Delete a saved graph by name"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        success = neo4j_service.delete_saved_graph(graph_name)
+        
+        if success:
+            return jsonify({
+                "success": True, 
+                "message": f"Graph '{graph_name}' deleted successfully"
+            })
+        else:
+            return jsonify({"success": False, "error": f"Graph '{graph_name}' not found"}), 404
+            
+    except Exception as e:
+        logger.error(f"Error deleting saved graph: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.errorhandler(404)
 def not_found(error):

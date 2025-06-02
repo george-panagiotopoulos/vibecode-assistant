@@ -13,6 +13,8 @@ const Sidebar = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [expandedFolders, setExpandedFolders] = useState(new Set());
+  const [folderContents, setFolderContents] = useState(new Map());
+  const [loadingFolders, setLoadingFolders] = useState(new Set());
 
   const handleRepositorySubmit = async (e) => {
     e.preventDefault();
@@ -30,12 +32,51 @@ const Sidebar = ({
     }
   };
 
-  const toggleFolder = (folderPath) => {
+  const loadFolderContents = async (folderPath) => {
+    if (folderContents.has(folderPath) || loadingFolders.has(folderPath)) {
+      return;
+    }
+
+    setLoadingFolders(prev => new Set(prev).add(folderPath));
+
+    try {
+      const response = await fetch('/api/repositories/folder-contents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repo_url: repositoryData?.files?.repository?.html_url || repositoryUrl,
+          folder_path: folderPath,
+          github_token: config?.github?.token || ''
+        })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setFolderContents(prev => new Map(prev).set(folderPath, result.contents));
+      } else {
+        console.error('Failed to load folder contents:', result.error);
+      }
+    } catch (error) {
+      console.error('Error loading folder contents:', error);
+    } finally {
+      setLoadingFolders(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(folderPath);
+        return newSet;
+      });
+    }
+  };
+
+  const toggleFolder = async (folderPath, file) => {
     const newExpanded = new Set(expandedFolders);
     if (newExpanded.has(folderPath)) {
       newExpanded.delete(folderPath);
     } else {
       newExpanded.add(folderPath);
+      // Load folder contents if not already loaded and it's a directory
+      if (!folderContents.has(folderPath) && (file.type === 'directory' || file.type === 'dir' || file.type === 'tree')) {
+        await loadFolderContents(folderPath);
+      }
     }
     setExpandedFolders(newExpanded);
   };
@@ -47,7 +88,7 @@ const Sidebar = ({
       newWindow.document.write(`
         <html>
           <head>
-            <title>${file.name} - ${repositoryData?.repository?.name || 'Repository'}</title>
+            <title>${file.name} - ${repositoryData?.files?.repository?.name || repositoryData?.repository?.name || 'Repository'}</title>
             <style>
               body { 
                 font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; 
@@ -97,7 +138,7 @@ const Sidebar = ({
           </head>
           <body>
             <div class="header">
-              <div class="file-path">${file.path}</div>
+              <div class="file-path">${file.path || file.name}</div>
               <button class="copy-btn" onclick="copyToClipboard()">📋 Copy to Clipboard</button>
             </div>
             <div id="content" class="loading">Loading file content...</div>
@@ -110,18 +151,19 @@ const Sidebar = ({
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      repo_url: '${repositoryData?.repository?.html_url || repositoryUrl}',
-                      file_path: '${file.path}',
-                      config: { github: { token: '${config?.github?.token || ''}' } }
+                      repo_url: '${repositoryData?.files?.repository?.html_url || repositoryUrl}',
+                      file_path: '${file.path || file.name}',
+                      github_token: '${config?.github?.token || ''}'
                     })
                   });
                   
                   const result = await response.json();
-                  if (result.success) {
-                    fileContent = result.content;
+                  if (result.success && result.content) {
+                    // Extract the actual content from the response object
+                    fileContent = result.content.content || result.content;
                     document.getElementById('content').innerHTML = '<div class="content">' + escapeHtml(fileContent) + '</div>';
                   } else {
-                    document.getElementById('content').innerHTML = '<div class="content">Error: ' + result.error + '</div>';
+                    document.getElementById('content').innerHTML = '<div class="content">Error: ' + (result.error || 'Failed to load file content') + '</div>';
                   }
                 } catch (error) {
                   document.getElementById('content').innerHTML = '<div class="content">Error loading file: ' + error.message + '</div>';
@@ -159,6 +201,7 @@ const Sidebar = ({
         </html>
       `);
     } catch (error) {
+      console.error('Error viewing file:', error);
       alert('Failed to open file viewer: ' + error.message);
     }
   };
@@ -168,6 +211,10 @@ const Sidebar = ({
     if (!isSelected) {
       onFileSelect(file, true);
     }
+  };
+
+  const removeFile = (file) => {
+    onFileSelect(file, false);
   };
 
   const renderFileTree = (files, level = 0, parentPath = '') => {
@@ -186,9 +233,10 @@ const Sidebar = ({
 
     return fileArray.map((file, index) => {
       const fullPath = parentPath ? `${parentPath}/${file.name}` : file.name;
-      const isDirectory = file.type === 'directory' || file.type === 'tree';
-      const isExpanded = expandedFolders.has(fullPath);
+      const isDirectory = file.type === 'directory' || file.type === 'tree' || file.type === 'dir';
+      const isExpanded = expandedFolders.has(file.path || fullPath);
       const isSelected = selectedFiles.some(f => f.path === file.path || f === file.path);
+      const isLoadingFolder = loadingFolders.has(file.path || fullPath);
 
       return (
         <div key={`${file.path || file.name}-${index}`} className="text-sm">
@@ -201,10 +249,11 @@ const Sidebar = ({
             {/* Expand/Collapse button for directories */}
             {isDirectory && (
               <button
-                onClick={() => toggleFolder(fullPath)}
+                onClick={() => toggleFolder(file.path || fullPath, file)}
                 className="mr-1 text-vibe-gray hover:text-vibe-blue transition-colors"
+                disabled={isLoadingFolder}
               >
-                {isExpanded ? '📂' : '📁'}
+                {isLoadingFolder ? '⏳' : (isExpanded ? '📂' : '📁')}
               </button>
             )}
             
@@ -214,9 +263,9 @@ const Sidebar = ({
               <span className="truncate">{file.name}</span>
             </div>
             
-            {/* Action buttons (only for files) */}
-            {!isDirectory && (
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* Action buttons */}
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {!isDirectory && (
                 <button
                   onClick={() => viewFile(file)}
                   className="text-xs px-2 py-1 bg-vibe-blue text-white rounded hover:bg-opacity-80 transition-colors"
@@ -224,24 +273,38 @@ const Sidebar = ({
                 >
                   View
                 </button>
+              )}
+              
+              {isSelected ? (
+                <button
+                  onClick={() => removeFile(file)}
+                  className="text-xs px-2 py-1 bg-vibe-red text-white rounded hover:bg-opacity-80 transition-colors"
+                  title="Remove from selected files"
+                >
+                  Remove
+                </button>
+              ) : (
                 <button
                   onClick={() => addFile(file)}
-                  className={`text-xs px-2 py-1 rounded transition-colors ${
-                    isSelected 
-                      ? 'bg-vibe-green text-white' 
-                      : 'bg-vibe-gray-dark text-vibe-gray hover:bg-vibe-gray hover:text-white'
-                  }`}
-                  title={isSelected ? 'Already selected' : 'Add to selected files'}
-                  disabled={isSelected}
+                  className="text-xs px-2 py-1 bg-vibe-gray-dark text-vibe-gray hover:bg-vibe-gray hover:text-white rounded transition-colors"
+                  title="Add to selected files"
                 >
-                  {isSelected ? '✓' : 'Add'}
+                  Add
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
           
           {/* Render children if directory is expanded */}
-          {isDirectory && isExpanded && file.children && renderFileTree(file.children, level + 1, fullPath)}
+          {isDirectory && isExpanded && (
+            <div>
+              {/* Prioritize loaded folder contents over existing children to prevent duplication */}
+              {folderContents.has(file.path || fullPath) ? 
+                renderFileTree(folderContents.get(file.path || fullPath), level + 1, file.path || fullPath) :
+                file.children && renderFileTree(file.children, level + 1, file.path || fullPath)
+              }
+            </div>
+          )}
         </div>
       );
     });

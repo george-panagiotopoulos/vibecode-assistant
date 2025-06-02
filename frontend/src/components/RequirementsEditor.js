@@ -9,6 +9,11 @@ const RequirementsEditor = () => {
   const [showAddEdge, setShowAddEdge] = useState(false);
   const [showAddLayer, setShowAddLayer] = useState(false);
   const [showGraphVisualization, setShowGraphVisualization] = useState(false);
+  const [showSaveGraph, setShowSaveGraph] = useState(false);
+  const [showLoadGraph, setShowLoadGraph] = useState(false);
+  const [graphName, setGraphName] = useState('');
+  const [savedGraphs, setSavedGraphs] = useState([]);
+  const [loadingGraphs, setLoadingGraphs] = useState(false);
 
   // Form states
   const [newNode, setNewNode] = useState({
@@ -31,26 +36,137 @@ const RequirementsEditor = () => {
     color: 'bg-blue-500'
   });
 
-  const layers = useMemo(() => ['UX', 'Architecture', 'Application', 'Infrastructure', 'Security'], []);
-  const [customLayers, setCustomLayers] = useState([]);
-  const allLayers = [...layers, ...customLayers];
+  // NEW LAYER MANAGEMENT SYSTEM - Backend Only
+  const [layers, setLayers] = useState([]);
+  const [layersLoading, setLayersLoading] = useState(false);
+  const [layersError, setLayersError] = useState(null);
   const edgeTypes = ['LINKED_TO', 'DEPENDS_ON', 'SUPPORTS', 'CONFLICTS_WITH', 'ENABLES'];
 
-  // Helper function to get layer colors
+  // Dynamic layer color assignment
   const getLayerColor = (layer) => {
-    const colorMap = {
-      'UX': 'bg-purple-500',
-      'Architecture': 'bg-blue-500', 
-      'Application': 'bg-green-500',
-      'Infrastructure': 'bg-orange-500',
-      'Security': 'bg-red-500'
-    };
+    const colors = [
+      'bg-purple-500', 'bg-blue-500', 'bg-green-500', 'bg-orange-500', 'bg-red-500',
+      'bg-cyan-500', 'bg-pink-500', 'bg-yellow-500', 'bg-indigo-500', 'bg-teal-500'
+    ];
     
-    // For custom layers, use a rotating set of colors
-    const customColors = ['bg-cyan-500', 'bg-pink-500', 'bg-yellow-500', 'bg-indigo-500', 'bg-teal-500'];
-    const customIndex = customLayers.indexOf(layer);
+    // Use layer name hash to consistently assign colors
+    let hash = 0;
+    for (let i = 0; i < layer.length; i++) {
+      hash = layer.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const colorIndex = Math.abs(hash) % colors.length;
+    return colors[colorIndex];
+  };
+
+  // NEW LAYER MANAGEMENT FUNCTIONS
+  
+  // Fetch layers from backend
+  const fetchLayers = useCallback(async () => {
+    setLayersLoading(true);
+    setLayersError(null);
     
-    return colorMap[layer] || customColors[customIndex % customColors.length] || 'bg-gray-500';
+    try {
+      const response = await fetch('/api/graph/layers');
+      const result = await response.json();
+      
+      if (result.success) {
+        setLayers(result.layers || []);
+      } else {
+        setLayersError(result.error || 'Failed to fetch layers');
+      }
+    } catch (err) {
+      setLayersError('Network error: ' + err.message);
+    } finally {
+      setLayersLoading(false);
+    }
+  }, []);
+
+  // Validate layer name
+  const validateLayerName = (name) => {
+    if (!name || !name.trim()) {
+      return 'Layer name is required';
+    }
+    
+    if (name.trim().length < 2) {
+      return 'Layer name must be at least 2 characters';
+    }
+    
+    if (layers.includes(name.trim())) {
+      return 'Layer already exists';
+    }
+    
+    return null;
+  };
+
+  // Create new layer
+  const createLayer = async (name, description = '') => {
+    const validationError = validateLayerName(name);
+    if (validationError) {
+      setError(validationError);
+      return false;
+    }
+
+    setLayersLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch('/api/graph/layers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim()
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        await fetchLayers(); // Refresh layers
+        return true;
+      } else {
+        setError(result.error || 'Failed to create layer');
+        return false;
+      }
+    } catch (err) {
+      setError('Network error: ' + err.message);
+      return false;
+    } finally {
+      setLayersLoading(false);
+    }
+  };
+
+  // Delete layer
+  const deleteLayer = async (layerName) => {
+    if (!window.confirm(`Are you sure you want to delete the entire "${layerName}" layer and all its nodes? This action cannot be undone.`)) {
+      return false;
+    }
+
+    setLayersLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/graph/layers/${encodeURIComponent(layerName)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        await fetchLayers(); // Refresh layers
+        await fetchGraphData(); // Refresh nodes/edges
+        return true;
+      } else {
+        setError(result.error || 'Failed to delete layer');
+        return false;
+      }
+    } catch (err) {
+      setError('Network error: ' + err.message);
+      return false;
+    } finally {
+      setLayersLoading(false);
+    }
   };
 
   // Fetch graph data
@@ -58,32 +174,38 @@ const RequirementsEditor = () => {
     setLoading(true);
     setError(null);
     try {
+      // Fetch nodes and edges
       const response = await fetch('/api/graph/nodes');
       const result = await response.json();
       
       if (result.success) {
         setNodes(result.data.nodes || []);
         setEdges(result.data.edges || []);
-        
-        // Update custom layers based on loaded data
-        const loadedLayers = [...new Set((result.data.nodes || []).map(node => node.layer))];
-        const newCustomLayers = loadedLayers.filter(layer => !layers.includes(layer));
-        setCustomLayers(newCustomLayers);
       } else {
         setError(result.error || 'Failed to fetch graph data');
       }
+
+      // Fetch layers using the new function
+      await fetchLayers();
+      
     } catch (err) {
+      console.error('Network error in fetchGraphData:', err);
       setError('Network error: ' + err.message);
     } finally {
       setLoading(false);
     }
-  }, [layers]);
+  }, [fetchLayers]);
 
   // Create new node
   const handleCreateNode = async (e) => {
     e.preventDefault();
     if (!newNode.id || !newNode.name) {
       setError('Node ID and name are required');
+      return;
+    }
+
+    if (layers.length === 0) {
+      setError('No layers available. Please create a layer first.');
       return;
     }
 
@@ -96,7 +218,13 @@ const RequirementsEditor = () => {
       
       const result = await response.json();
       if (result.success) {
-        setNewNode({ id: '', name: '', description: '', layer: 'Application', type: 'requirement' });
+        setNewNode({ 
+          id: '', 
+          name: '', 
+          description: '', 
+          layer: layers[0] || '', 
+          type: 'requirement' 
+        });
         setShowAddNode(false);
         fetchGraphData();
       } else {
@@ -206,29 +334,6 @@ const RequirementsEditor = () => {
     }
   };
 
-  // Delete layer
-  const handleDeleteLayer = async (layerName) => {
-    if (!window.confirm(`Are you sure you want to delete the entire "${layerName}" layer and all its nodes? This action cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`/api/graph/layers/${encodeURIComponent(layerName)}`, {
-        method: 'DELETE'
-      });
-      
-      const result = await response.json();
-      if (result.success) {
-        setError(null);
-        fetchGraphData(); // Refresh the data
-      } else {
-        setError(result.error || 'Failed to delete layer');
-      }
-    } catch (err) {
-      setError('Network error: ' + err.message);
-    }
-  };
-
   // Clear all data
   const handleClearAll = async () => {
     if (!window.confirm('Are you sure you want to clear all graph data? This cannot be undone.')) {
@@ -251,6 +356,87 @@ const RequirementsEditor = () => {
     }
   };
 
+  // Save graph
+  const handleSaveGraph = async (e) => {
+    e.preventDefault();
+    if (!graphName.trim()) {
+      setError('Graph name is required');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/graph/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ graph_name: graphName.trim() })
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        setGraphName('');
+        setShowSaveGraph(false);
+        setError(null);
+        alert(`Graph "${graphName}" saved successfully!`);
+      } else {
+        setError(result.error || 'Failed to save graph');
+      }
+    } catch (err) {
+      setError('Network error: ' + err.message);
+    }
+  };
+
+  // Load saved graphs list
+  const loadSavedGraphs = async () => {
+    setLoadingGraphs(true);
+    try {
+      const response = await fetch('/api/graph/saved');
+      const result = await response.json();
+      if (result.success) {
+        setSavedGraphs(result.graphs || []);
+      } else {
+        setError(result.error || 'Failed to load saved graphs');
+      }
+    } catch (err) {
+      setError('Network error: ' + err.message);
+    } finally {
+      setLoadingGraphs(false);
+    }
+  };
+
+  // Load specific graph
+  const handleLoadGraph = async (graphName) => {
+    if (!window.confirm(`Are you sure you want to load "${graphName}"? This will replace the current graph data.`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/graph/load/${encodeURIComponent(graphName)}`, {
+        method: 'POST'
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        setShowLoadGraph(false);
+        setError(null);
+        fetchGraphData(); // Refresh the data
+        alert(`Graph "${graphName}" loaded successfully!`);
+      } else {
+        setError(result.error || 'Failed to load graph');
+      }
+    } catch (err) {
+      setError('Network error: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Open load graph modal and fetch saved graphs
+  const openLoadGraphModal = () => {
+    setShowLoadGraph(true);
+    loadSavedGraphs();
+  };
+
   // Get type badge color
   const getTypeColor = (type) => {
     const colors = {
@@ -270,23 +456,24 @@ const RequirementsEditor = () => {
     return acc;
   }, {});
 
+  // Handle layer creation using new system
   const handleCreateLayer = async (e) => {
     e.preventDefault();
     
-    if (!newLayer.name.trim()) {
-      setError('Layer name is required');
-      return;
+    const success = await createLayer(newLayer.name, newLayer.description);
+    if (success) {
+      setNewLayer({ name: '', description: '', color: 'bg-blue-500' });
+      setShowAddLayer(false);
+      setError(null);
     }
-    
-    if (allLayers.includes(newLayer.name)) {
-      setError('Layer already exists');
-      return;
+  };
+
+  // Handle layer deletion using new system
+  const handleDeleteLayer = async (layerName) => {
+    const success = await deleteLayer(layerName);
+    if (success) {
+      setError(null);
     }
-    
-    setCustomLayers([...customLayers, newLayer.name]);
-    setNewLayer({ name: '', description: '', color: 'bg-blue-500' });
-    setShowAddLayer(false);
-    setError(null);
   };
 
   useEffect(() => {
@@ -348,6 +535,21 @@ const RequirementsEditor = () => {
             🌐 Visualize Graph
           </button>
           <button
+            onClick={() => setShowSaveGraph(true)}
+            disabled={loading || nodes.length === 0}
+            className="btn-accent"
+            title={nodes.length === 0 ? "No graph data to save" : "Save current graph"}
+          >
+            💾 Save Graph
+          </button>
+          <button
+            onClick={openLoadGraphModal}
+            disabled={loading}
+            className="btn-secondary"
+          >
+            📂 Load Graph
+          </button>
+          <button
             onClick={handleLoadSampleData}
             disabled={loading}
             className="btn-accent"
@@ -386,23 +588,37 @@ const RequirementsEditor = () => {
               </h3>
               
               <div className="space-y-6">
-                {allLayers.map(layer => {
-                  const layerNodes = nodesByLayer[layer] || [];
-                  
-                  return (
-                    <div key={layer} className="border border-vibe-gray-dark rounded-lg">
-                      {/* Layer Header */}
-                      <div className="bg-vibe-darker p-4 rounded-t-lg border-b border-vibe-gray-dark">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-4 h-4 rounded-full ${getLayerColor(layer)}`}></div>
-                            <h4 className="font-semibold text-vibe-gray text-lg">{layer}</h4>
-                            <span className="text-sm text-vibe-gray opacity-60">
-                              ({layerNodes.length} node{layerNodes.length !== 1 ? 's' : ''})
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {(customLayers.includes(layer) || (!layers.includes(layer) && layerNodes.length > 0)) && (
+                {layers.length === 0 ? (
+                  <div className="text-center py-12 text-vibe-gray opacity-60">
+                    <div className="mb-4">
+                      <div className="text-6xl mb-4">📋</div>
+                      <h4 className="text-lg font-medium mb-2">No layers created yet</h4>
+                      <p className="text-sm">Create your first layer to start organizing your requirements</p>
+                    </div>
+                    <button
+                      onClick={() => setShowAddLayer(true)}
+                      className="btn-primary mt-4"
+                    >
+                      Create First Layer
+                    </button>
+                  </div>
+                ) : (
+                  layers.map(layer => {
+                    const layerNodes = nodesByLayer[layer] || [];
+                    
+                    return (
+                      <div key={layer} className="border border-vibe-gray-dark rounded-lg">
+                        {/* Layer Header */}
+                        <div className="bg-vibe-darker p-4 rounded-t-lg border-b border-vibe-gray-dark">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-4 h-4 rounded-full ${getLayerColor(layer)}`}></div>
+                              <h4 className="font-semibold text-vibe-gray text-lg">{layer}</h4>
+                              <span className="text-sm text-vibe-gray opacity-60">
+                                ({layerNodes.length} node{layerNodes.length !== 1 ? 's' : ''})
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
                               <button
                                 onClick={() => handleDeleteLayer(layer)}
                                 className="text-vibe-red hover:text-red-400 text-sm px-2 py-1 rounded hover:bg-vibe-red hover:bg-opacity-20 transition-colors"
@@ -410,70 +626,65 @@ const RequirementsEditor = () => {
                               >
                                 🗑️ Delete Layer
                               </button>
-                            )}
-                            {layers.includes(layer) && layerNodes.length === 0 && (
-                              <span className="text-xs text-vibe-gray opacity-50">
-                                Default layer
-                              </span>
-                            )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      
-                      {/* Layer Nodes */}
-                      <div className="p-4">
-                        {layerNodes.length === 0 ? (
-                          <div className="text-center py-8 text-vibe-gray opacity-60">
-                            No nodes in this layer yet
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {layerNodes.map(node => (
-                              <div key={node.id} className="bg-vibe-dark p-4 rounded-lg border border-vibe-gray-dark hover:border-vibe-blue transition-colors">
-                                <div className="flex items-start justify-between mb-3">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-2">
-                                      <span className="font-medium text-vibe-gray">{node.name}</span>
-                                      <span className={`px-2 py-1 text-xs rounded ${getTypeColor(node.type)} text-white`}>
-                                        {node.type}
-                                      </span>
+                        
+                        {/* Layer Nodes */}
+                        <div className="p-4">
+                          {layerNodes.length === 0 ? (
+                            <div className="text-center py-8 text-vibe-gray opacity-60">
+                              No nodes in this layer yet
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                              {layerNodes.map(node => (
+                                <div key={node.id} className="bg-vibe-dark p-4 rounded-lg border border-vibe-gray-dark hover:border-vibe-blue transition-colors">
+                                  <div className="flex items-start justify-between mb-3">
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <span className="font-medium text-vibe-gray">{node.name}</span>
+                                        <span className={`px-2 py-1 text-xs rounded ${getTypeColor(node.type)} text-white`}>
+                                          {node.type}
+                                        </span>
+                                      </div>
+                                      <p className="text-sm text-vibe-gray opacity-75 mb-2 line-clamp-2">{node.description}</p>
+                                      <code className="text-xs text-vibe-blue bg-vibe-darker px-2 py-1 rounded">{node.id}</code>
                                     </div>
-                                    <p className="text-sm text-vibe-gray opacity-75 mb-2 line-clamp-2">{node.description}</p>
-                                    <code className="text-xs text-vibe-blue bg-vibe-darker px-2 py-1 rounded">{node.id}</code>
+                                    <button
+                                      onClick={() => handleDeleteNode(node.id)}
+                                      className="text-vibe-red hover:text-white text-sm ml-2 opacity-60 hover:opacity-100"
+                                      title="Delete node"
+                                    >
+                                      🗑️
+                                    </button>
                                   </div>
-                                  <button
-                                    onClick={() => handleDeleteNode(node.id)}
-                                    className="text-vibe-red hover:text-white text-sm ml-2 opacity-60 hover:opacity-100"
-                                    title="Delete node"
-                                  >
-                                    🗑️
-                                  </button>
-                                </div>
-                                
-                                {/* Node Relationships */}
-                                <div className="mt-3 pt-3 border-t border-vibe-gray-dark">
-                                  <div className="text-xs text-vibe-gray opacity-75">
-                                    {(() => {
-                                      const incomingEdges = edges.filter(e => e.to_id === node.id);
-                                      const outgoingEdges = edges.filter(e => e.from_id === node.id);
-                                      const totalConnections = incomingEdges.length + outgoingEdges.length;
-                                      
-                                      if (totalConnections === 0) {
-                                        return 'No connections';
-                                      }
-                                      
-                                      return `${totalConnections} connection${totalConnections !== 1 ? 's' : ''} (${incomingEdges.length} in, ${outgoingEdges.length} out)`;
-                                    })()}
+                                  
+                                  {/* Node Relationships */}
+                                  <div className="mt-3 pt-3 border-t border-vibe-gray-dark">
+                                    <div className="text-xs text-vibe-gray opacity-75">
+                                      {(() => {
+                                        const incomingEdges = edges.filter(e => e.to_id === node.id);
+                                        const outgoingEdges = edges.filter(e => e.from_id === node.id);
+                                        const totalConnections = incomingEdges.length + outgoingEdges.length;
+                                        
+                                        if (totalConnections === 0) {
+                                          return 'No connections';
+                                        }
+                                        
+                                        return `${totalConnections} connection${totalConnections !== 1 ? 's' : ''} (${incomingEdges.length} in, ${outgoingEdges.length} out)`;
+                                      })()}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -626,10 +837,15 @@ const RequirementsEditor = () => {
                     value={newNode.layer}
                     onChange={(e) => setNewNode({...newNode, layer: e.target.value})}
                     className="input-primary w-full"
+                    disabled={layers.length === 0}
                   >
-                    {allLayers.map(layer => (
-                      <option key={layer} value={layer}>{layer}</option>
-                    ))}
+                    {layers.length === 0 ? (
+                      <option value="">No layers available - create a layer first</option>
+                    ) : (
+                      layers.map(layer => (
+                        <option key={layer} value={layer}>{layer}</option>
+                      ))
+                    )}
                   </select>
                 </div>
                 
@@ -780,12 +996,8 @@ const RequirementsEditor = () => {
                             <div className="text-sm text-vibe-gray">Relationships</div>
                           </div>
                           <div className="bg-vibe-darker p-3 rounded">
-                            <div className="text-2xl font-bold text-vibe-orange">{allLayers.length}</div>
+                            <div className="text-2xl font-bold text-vibe-orange">{layers.length}</div>
                             <div className="text-sm text-vibe-gray">Layers</div>
-                          </div>
-                          <div className="bg-vibe-darker p-3 rounded">
-                            <div className="text-2xl font-bold text-vibe-purple">{customLayers.length}</div>
-                            <div className="text-sm text-vibe-gray">Custom Layers</div>
                           </div>
                         </div>
                       </div>
@@ -796,7 +1008,7 @@ const RequirementsEditor = () => {
                         <div className="relative bg-vibe-darkest rounded p-6 min-h-[400px] overflow-auto">
                           {/* Layer-based layout */}
                           <div className="space-y-8">
-                            {allLayers.map((layer, layerIndex) => {
+                            {layers.map((layer, layerIndex) => {
                               const layerNodes = nodesByLayer[layer] || [];
                               if (layerNodes.length === 0) return null;
                               
@@ -871,6 +1083,124 @@ const RequirementsEditor = () => {
           </div>
         )}
       </div>
+
+      {/* Save Graph Modal */}
+      {showSaveGraph && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-vibe-dark border border-vibe-gray-dark rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-vibe-gray mb-4">Save Graph</h3>
+            <form onSubmit={handleSaveGraph}>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-vibe-gray mb-2">
+                  Graph Name
+                </label>
+                <input
+                  type="text"
+                  value={graphName}
+                  onChange={(e) => setGraphName(e.target.value)}
+                  placeholder="Enter a name for your graph"
+                  className="w-full px-3 py-2 bg-vibe-darker border border-vibe-gray-dark rounded text-vibe-gray placeholder-vibe-gray placeholder-opacity-50 focus:outline-none focus:border-vibe-blue"
+                  required
+                />
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSaveGraph(false);
+                    setGraphName('');
+                  }}
+                  className="px-4 py-2 text-vibe-gray hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-accent"
+                >
+                  💾 Save Graph
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Load Graph Modal */}
+      {showLoadGraph && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-vibe-dark border border-vibe-gray-dark rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-vibe-gray">Load Saved Graph</h3>
+              <button
+                onClick={() => setShowLoadGraph(false)}
+                className="text-vibe-gray hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto">
+              {loadingGraphs ? (
+                <div className="text-center py-8">
+                  <div className="text-vibe-gray">Loading saved graphs...</div>
+                </div>
+              ) : savedGraphs.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="text-vibe-gray opacity-75">No saved graphs found</div>
+                  <div className="text-sm text-vibe-gray opacity-50 mt-2">
+                    Save your current graph to see it here
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {savedGraphs.map((graph, index) => (
+                    <div key={index} className="bg-vibe-darker p-4 rounded border border-vibe-gray-dark">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-vibe-gray">{graph.name}</h4>
+                          <p className="text-sm text-vibe-gray opacity-75">
+                            {graph.nodes_count} nodes, {graph.edges_count} edges
+                          </p>
+                          {graph.created_at && (
+                            <p className="text-xs text-vibe-gray opacity-60">
+                              Created: {new Date(graph.created_at).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleLoadGraph(graph.name)}
+                            className="px-3 py-1 bg-vibe-blue text-white rounded hover:bg-opacity-80 transition-colors text-sm"
+                          >
+                            Load
+                          </button>
+                          <button
+                            onClick={() => handleDeleteGraph(graph.name)}
+                            className="px-3 py-1 bg-vibe-red text-white rounded hover:bg-opacity-80 transition-colors text-sm"
+                            title="Delete this saved graph"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="flex justify-end mt-4 pt-4 border-t border-vibe-gray-dark">
+              <button
+                onClick={() => setShowLoadGraph(false)}
+                className="px-4 py-2 text-vibe-gray hover:text-white transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

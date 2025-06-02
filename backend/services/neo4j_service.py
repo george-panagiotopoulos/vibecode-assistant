@@ -242,21 +242,36 @@ class Neo4jService:
             raise
     
     def delete_layer(self, layer_name: str) -> int:
-        """Delete all nodes in a specific layer"""
+        """Delete all nodes in a specific layer and the custom layer definition if it exists"""
         if not self.driver:
             raise Exception("Neo4j connection not available")
         
         try:
             with self.driver.session() as session:
-                query = """
+                # First, delete all nodes in the layer
+                delete_nodes_query = """
                 MATCH (n:Node {layer: $layer_name})
                 DETACH DELETE n
                 RETURN count(n) as deleted_count
                 """
                 
-                result = session.run(query, {'layer_name': layer_name})
+                result = session.run(delete_nodes_query, {'layer_name': layer_name})
                 record = result.single()
                 deleted_count = record['deleted_count'] if record else 0
+                
+                # Also delete the custom layer definition if it exists
+                delete_custom_layer_query = """
+                MATCH (l:CustomLayer {name: $layer_name})
+                DELETE l
+                RETURN count(l) as deleted_layer_count
+                """
+                
+                layer_result = session.run(delete_custom_layer_query, {'layer_name': layer_name})
+                layer_record = layer_result.single()
+                deleted_layer_count = layer_record['deleted_layer_count'] if layer_record else 0
+                
+                if deleted_layer_count > 0:
+                    logger.info(f"Deleted custom layer definition: '{layer_name}'")
                 
                 logger.info(f"Deleted {deleted_count} nodes from layer '{layer_name}'")
                 return deleted_count
@@ -266,15 +281,20 @@ class Neo4jService:
             raise
     
     def clear_all_data(self) -> bool:
-        """Clear all nodes and relationships from the database"""
+        """Clear all nodes and relationships from the database (except saved graphs)"""
         if not self.driver:
             raise Exception("Neo4j connection not available")
         
         try:
             with self.driver.session() as session:
-                query = "MATCH (n) DETACH DELETE n"
+                # Only delete nodes that are NOT SavedGraph, SavedNode, or SavedEdge
+                query = """
+                MATCH (n) 
+                WHERE NOT n:SavedGraph AND NOT n:SavedNode AND NOT n:SavedEdge
+                DETACH DELETE n
+                """
                 session.run(query)
-                logger.info("All graph data cleared")
+                logger.info("All main graph data cleared (saved graphs preserved)")
                 return True
                 
         except Exception as e:
@@ -383,4 +403,310 @@ class Neo4jService:
             
         except Exception as e:
             logger.error(f"Error populating sample data: {e}")
+            raise
+
+    def save_graph(self, graph_name: str, graph_data: Dict[str, Any]) -> bool:
+        """Save current graph data with a name"""
+        if not self.driver:
+            raise Exception("Neo4j connection not available")
+        
+        try:
+            with self.driver.session() as session:
+                # First, delete any existing saved nodes and edges with the same graph name
+                delete_nodes_query = """
+                MATCH (sn:SavedNode {graph_name: $graph_name})
+                DELETE sn
+                """
+                session.run(delete_nodes_query, {'graph_name': graph_name})
+                
+                delete_edges_query = """
+                MATCH (se:SavedEdge {graph_name: $graph_name})
+                DELETE se
+                """
+                session.run(delete_edges_query, {'graph_name': graph_name})
+                
+                # Delete existing SavedGraph node if it exists
+                delete_graph_query = """
+                MATCH (sg:SavedGraph {name: $graph_name})
+                DELETE sg
+                """
+                session.run(delete_graph_query, {'graph_name': graph_name})
+                
+                # Create a new saved graph node
+                create_graph_query = """
+                CREATE (sg:SavedGraph {
+                    name: $graph_name,
+                    created_at: datetime(),
+                    nodes_count: $nodes_count,
+                    edges_count: $edges_count
+                })
+                RETURN sg
+                """
+                
+                session.run(create_graph_query, {
+                    'graph_name': graph_name,
+                    'nodes_count': len(graph_data['nodes']),
+                    'edges_count': len(graph_data['edges'])
+                })
+                
+                # Save all nodes
+                for node in graph_data['nodes']:
+                    save_node_query = """
+                    CREATE (sn:SavedNode {
+                        graph_name: $graph_name,
+                        id: $id,
+                        name: $name,
+                        description: $description,
+                        layer: $layer,
+                        type: $type
+                    })
+                    """
+                    session.run(save_node_query, {
+                        'graph_name': graph_name,
+                        'id': node['id'],
+                        'name': node['name'],
+                        'description': node['description'],
+                        'layer': node['layer'],
+                        'type': node['type']
+                    })
+                
+                # Save all edges
+                for edge in graph_data['edges']:
+                    save_edge_query = """
+                    CREATE (se:SavedEdge {
+                        graph_name: $graph_name,
+                        from_id: $from_id,
+                        to_id: $to_id,
+                        type: $type
+                    })
+                    """
+                    session.run(save_edge_query, {
+                        'graph_name': graph_name,
+                        'from_id': edge['from_id'],
+                        'to_id': edge['to_id'],
+                        'type': edge['type']
+                    })
+                
+                logger.info(f"Graph '{graph_name}' saved successfully")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error saving graph '{graph_name}': {e}")
+            raise
+
+    def get_saved_graphs(self) -> List[Dict[str, Any]]:
+        """Get list of all saved graphs"""
+        if not self.driver:
+            raise Exception("Neo4j connection not available")
+        
+        try:
+            with self.driver.session() as session:
+                query = """
+                MATCH (sg:SavedGraph)
+                RETURN sg.name as name, sg.created_at as created_at, 
+                       sg.nodes_count as nodes_count, sg.edges_count as edges_count
+                ORDER BY sg.created_at DESC
+                """
+                
+                result = session.run(query)
+                graphs = []
+                for record in result:
+                    graphs.append({
+                        'name': record['name'],
+                        'created_at': record['created_at'].isoformat() if record['created_at'] else None,
+                        'nodes_count': record['nodes_count'],
+                        'edges_count': record['edges_count']
+                    })
+                
+                return graphs
+                
+        except Exception as e:
+            logger.error(f"Error getting saved graphs: {e}")
+            raise
+
+    def load_graph(self, graph_name: str) -> bool:
+        """Load a saved graph by name"""
+        if not self.driver:
+            raise Exception("Neo4j connection not available")
+        
+        try:
+            with self.driver.session() as session:
+                # Check if the saved graph exists
+                check_query = """
+                MATCH (sg:SavedGraph {name: $graph_name})
+                RETURN count(sg) as count
+                """
+                result = session.run(check_query, {'graph_name': graph_name})
+                if result.single()['count'] == 0:
+                    return False
+                
+                # Load saved nodes
+                nodes_query = """
+                MATCH (sn:SavedNode {graph_name: $graph_name})
+                RETURN sn.id as id, sn.name as name, sn.description as description,
+                       sn.layer as layer, sn.type as type
+                """
+                
+                nodes_result = session.run(nodes_query, {'graph_name': graph_name})
+                for record in nodes_result:
+                    # Create the actual node
+                    create_node_query = """
+                    MERGE (n:Node {id: $id})
+                    SET n.name = $name,
+                        n.description = $description,
+                        n.layer = $layer,
+                        n.type = $type,
+                        n.created_at = datetime(),
+                        n.updated_at = datetime()
+                    """
+                    session.run(create_node_query, {
+                        'id': record['id'],
+                        'name': record['name'],
+                        'description': record['description'],
+                        'layer': record['layer'],
+                        'type': record['type']
+                    })
+                
+                # Load saved edges
+                edges_query = """
+                MATCH (se:SavedEdge {graph_name: $graph_name})
+                RETURN se.from_id as from_id, se.to_id as to_id, se.type as type
+                """
+                
+                edges_result = session.run(edges_query, {'graph_name': graph_name})
+                for record in edges_result:
+                    # Create the actual edge
+                    create_edge_query = f"""
+                    MATCH (a:Node {{id: $from_id}})
+                    MATCH (b:Node {{id: $to_id}})
+                    MERGE (a)-[r:{record['type']}]->(b)
+                    SET r.created_at = datetime()
+                    """
+                    session.run(create_edge_query, {
+                        'from_id': record['from_id'],
+                        'to_id': record['to_id']
+                    })
+                
+                logger.info(f"Graph '{graph_name}' loaded successfully")
+                return True
+                
+        except Exception as e:
+            logger.error(f"Error loading graph '{graph_name}': {e}")
+            raise
+
+    def delete_saved_graph(self, graph_name: str) -> bool:
+        """Delete a saved graph by name"""
+        try:
+            with self.driver.session() as session:
+                # Check if graph exists
+                result = session.run(
+                    "MATCH (g:SavedGraph {name: $name}) RETURN g",
+                    name=graph_name
+                )
+                
+                if not result.single():
+                    return False
+                
+                # Delete the saved graph and all its data
+                session.run(
+                    """
+                    MATCH (g:SavedGraph {name: $name})
+                    OPTIONAL MATCH (g)-[:CONTAINS_NODE]->(n:SavedNode)
+                    OPTIONAL MATCH (g)-[:CONTAINS_EDGE]->(e:SavedEdge)
+                    DETACH DELETE g, n, e
+                    """,
+                    name=graph_name
+                )
+                
+                logger.info(f"✅ Deleted saved graph: {graph_name}")
+                return True
+                
+        except Exception as e:
+            logger.error(f"❌ Error deleting saved graph {graph_name}: {e}")
+            return False
+
+    def get_custom_layers(self) -> List[str]:
+        """Get all custom layers that have been created"""
+        try:
+            with self.driver.session() as session:
+                result = session.run(
+                    "MATCH (l:CustomLayer) RETURN l.name as name ORDER BY l.name"
+                )
+                
+                layers = [record["name"] for record in result]
+                logger.info(f"✅ Retrieved {len(layers)} custom layers")
+                return layers
+                
+        except Exception as e:
+            logger.error(f"❌ Error getting custom layers: {e}")
+            return []
+
+    def get_all_layers(self) -> List[str]:
+        """Get all layers (both custom and from existing nodes)"""
+        try:
+            # Get custom layers
+            custom_layers = self.get_custom_layers()
+            
+            # Get layers from existing nodes
+            with self.driver.session() as session:
+                result = session.run(
+                    "MATCH (n:Node) WHERE n.layer IS NOT NULL RETURN DISTINCT n.layer as layer ORDER BY layer"
+                )
+                
+                node_layers = [record["layer"] for record in result]
+            
+            # Combine all layers and remove duplicates
+            all_layers = list(set(custom_layers + node_layers))
+            all_layers.sort()
+            
+            logger.info(f"✅ Retrieved {len(all_layers)} total layers")
+            return all_layers
+                
+        except Exception as e:
+            logger.error(f"❌ Error getting all layers: {e}")
+            return []
+
+    def create_custom_layer(self, layer_name: str, description: str = "") -> Dict[str, Any]:
+        """Create a new custom layer"""
+        try:
+            with self.driver.session() as session:
+                # Check if layer already exists
+                existing_result = session.run(
+                    "MATCH (l:CustomLayer {name: $name}) RETURN l",
+                    name=layer_name
+                )
+                
+                if existing_result.single():
+                    raise ValueError(f"Layer '{layer_name}' already exists")
+                
+                # Create the custom layer
+                result = session.run(
+                    """
+                    CREATE (l:CustomLayer {
+                        name: $name,
+                        description: $description,
+                        created_at: datetime()
+                    })
+                    RETURN l
+                    """,
+                    name=layer_name,
+                    description=description
+                )
+                
+                record = result.single()
+                if record:
+                    layer_node = record["l"]
+                    created_layer = {
+                        "name": layer_node["name"],
+                        "description": layer_node["description"],
+                        "created_at": layer_node["created_at"].isoformat() if layer_node["created_at"] else None
+                    }
+                    
+                    logger.info(f"✅ Created custom layer: {layer_name}")
+                    return created_layer
+                else:
+                    raise Exception("Failed to create custom layer")
+                
+        except Exception as e:
+            logger.error(f"❌ Error creating custom layer {layer_name}: {e}")
             raise 
