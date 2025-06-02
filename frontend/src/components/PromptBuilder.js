@@ -17,12 +17,20 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
 
   const getSystemPrompt = (enhancementType) => {
     switch (enhancementType) {
-      case 'full_specification':
-        return `You are an expert AI coding assistant. Transform the user's request into a comprehensive Business Requirements Specification for development projects. Provide detailed, actionable specifications that serve as complete Business Requirements Documents.`;
-      case 'plan':
-        return `You are an expert AI coding assistant. Create a step-by-step implementation plan for the user's request. The plan should be clear, actionable, and no more than 500 words. Focus on the key steps needed to implement the development task effectively.`;
-      case 'clarity':
-        return `You are an expert AI coding assistant. Improve the clarity and language of the user's prompt without adding new details or requirements. Make the prompt clearer, more precise, and better structured while maintaining the original intent and scope.`;
+      case 'maximum_detail':
+        return `You are an expert AI coding assistant. Create a comprehensive step-by-step implementation guide for the user's request. The guide must contain between 15-25 detailed steps that cover all aspects of the development task. Each step should be specific, actionable, and include technical details. 
+
+CRITICAL REQUIREMENT: For each step in your plan, you must provide detailed instructions on how to satisfy the most relevant non-functional requirements from the provided list. Explicitly reference which NFRs apply to each step and provide specific implementation guidance to meet those requirements.
+
+Consider all inputs including non-functional requirements, selected files, and project context. Structure your response as a numbered list with clear, detailed explanations for each step, ensuring NFR compliance is addressed throughout the implementation.`;
+      case 'balanced':
+        return `You are an expert AI coding assistant. Create a balanced step-by-step implementation plan for the user's request. The plan should contain approximately 10 steps that cover the key aspects of the development task. Each step should be clear, actionable, and focused on the most important implementation details. Consider all inputs including non-functional requirements, selected files, and project context. Structure your response as a numbered list.`;
+      case 'key_requirements':
+        return `You are an expert AI coding assistant. Your task is to:
+1. Rephrase the user's requirement with enhanced clarity and precision
+2. Provide a condensed, comma-separated list of the selected non-functional requirements
+
+Focus on making the user's intent crystal clear while presenting the NFRs in a concise, easily digestible format. Do not provide implementation steps - only clarify what needs to be built and what constraints must be satisfied.`;
       default:
         return `You are an expert AI coding assistant. Transform the user's request into a comprehensive Business Requirements Specification for development projects.`;
     }
@@ -48,14 +56,47 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
 
     try {
       const systemPrompt = getSystemPrompt(enhancementType);
-      const maxTokens = enhancementType === 'plan' ? 1000 : 4000; // Limit tokens for plan to ensure 500 words or less
       
-      // Build the enhanced prompt with Non-Functional Requirements if selected
+      // Set token limits based on enhancement type
+      let maxTokens;
+      switch (enhancementType) {
+        case 'maximum_detail':
+          maxTokens = 6000; // Increased for detailed step-by-step guide
+          break;
+        case 'balanced':
+          maxTokens = 3000; // Moderate for balanced plan
+          break;
+        case 'key_requirements':
+          maxTokens = 2000; // Focused for key requirements
+          break;
+        default:
+          maxTokens = 4000;
+      }
+      
+      // Build the enhanced prompt with all available context
       let enhancedPrompt = prompt;
+      
+      // Add Non-Functional Requirements if selected
       if (selectedNFRs.length > 0) {
         const nfrSection = '\n\nNon-Functional Requirements:\n' + 
           selectedNFRs.map(nfr => `- ${nfr.name}: ${nfr.description}`).join('\n');
         enhancedPrompt += nfrSection;
+      }
+      
+      // Add selected files context if available
+      if (selectedFiles.length > 0) {
+        const filesSection = '\n\nSelected Files Context:\n' + 
+          selectedFiles.map(file => `- ${file.name} (${file.type || 'file'})`).join('\n');
+        enhancedPrompt += filesSection;
+      }
+      
+      // Add specific instructions based on enhancement type
+      if (enhancementType === 'maximum_detail') {
+        enhancedPrompt += '\n\nPlease provide a detailed step-by-step implementation guide with 15-25 comprehensive steps. For each step, include specific instructions on how to satisfy the most relevant non-functional requirements from the list provided.';
+      } else if (enhancementType === 'balanced') {
+        enhancedPrompt += '\n\nPlease provide a balanced step-by-step plan with approximately 10 key steps.';
+      } else if (enhancementType === 'key_requirements') {
+        enhancedPrompt += '\n\nPlease rephrase my requirement with enhanced clarity and precision, then provide a condensed comma-separated list of the selected non-functional requirements.';
       }
       
       // Use streaming for the response
@@ -126,12 +167,12 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
 
   const getEnhancementTypeLabel = (type) => {
     switch (type) {
-      case 'full_specification':
-        return 'Full Specification';
-      case 'plan':
-        return 'Implementation Plan';
-      case 'clarity':
-        return 'Clarity Enhancement';
+      case 'maximum_detail':
+        return 'Maximum Detail Guide';
+      case 'balanced':
+        return 'Balanced Plan';
+      case 'key_requirements':
+        return 'Key Requirements Analysis';
       default:
         return 'Enhanced Prompt';
     }
@@ -261,36 +302,36 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
         <div className="flex justify-between items-center">
           <div className="flex space-x-2">
             <button
-              onClick={() => enhancePrompt('full_specification')}
+              onClick={() => enhancePrompt('maximum_detail')}
               disabled={!prompt.trim() || isEnhancing}
               className="btn-standard disabled:opacity-50"
-              title="Generate a comprehensive business requirements specification"
+              title="Generate a comprehensive step-by-step implementation guide (15-25 detailed steps)"
             >
-              {isEnhancing && currentEnhancementType === 'full_specification' ? 
+              {isEnhancing && currentEnhancementType === 'maximum_detail' ? 
                 (isStreaming ? '🔄 Streaming...' : '🔄 Enhancing...') : 
-                '📋 Full Specification'
+                '📋 Maximum Detail'
               }
             </button>
             <button
-              onClick={() => enhancePrompt('plan')}
+              onClick={() => enhancePrompt('balanced')}
               disabled={!prompt.trim() || isEnhancing}
               className="btn-standard disabled:opacity-50"
-              title="Generate a step-by-step implementation plan (500 words or less)"
+              title="Generate a balanced step-by-step implementation plan (approximately 10 steps)"
             >
-              {isEnhancing && currentEnhancementType === 'plan' ? 
+              {isEnhancing && currentEnhancementType === 'balanced' ? 
                 (isStreaming ? '🔄 Streaming...' : '🔄 Planning...') : 
-                '📝 Plan'
+                '📝 Balanced'
               }
             </button>
             <button
-              onClick={() => enhancePrompt('clarity')}
+              onClick={() => enhancePrompt('key_requirements')}
               disabled={!prompt.trim() || isEnhancing}
               className="btn-standard disabled:opacity-50"
-              title="Improve the clarity and language of your prompt"
+              title="Analyze and extract key requirements and essential components"
             >
-              {isEnhancing && currentEnhancementType === 'clarity' ? 
-                (isStreaming ? '🔄 Streaming...' : '🔄 Clarifying...') : 
-                '✨ Clarity'
+              {isEnhancing && currentEnhancementType === 'key_requirements' ? 
+                (isStreaming ? '🔄 Streaming...' : '🔄 Analyzing...') : 
+                '✨ Key Requirements'
               }
             </button>
             <button

@@ -314,8 +314,9 @@ def enhance_prompt():
         user_prompt = data['prompt']
         task_type = data.get('task_type', 'development')
         selected_files = data.get('selected_files', [])
+        enhancement_type = data.get('enhancement_type', 'development')  # New parameter
         
-        logger.info(f"Processing enhance-prompt request: {user_prompt[:100]}...")
+        logger.info(f"Processing enhance-prompt request: {user_prompt[:100]}... (type: {enhancement_type})")
         
         # Log the API request
         logging_service.log_api_request(
@@ -323,6 +324,7 @@ def enhance_prompt():
             request_data={
                 'prompt': user_prompt,
                 'task_type': task_type,
+                'enhancement_type': enhancement_type,
                 'selected_files_count': len(selected_files)
             }
         )
@@ -342,19 +344,20 @@ def enhance_prompt():
             logging_service.log_error("bedrock_connection", error_msg)
             return jsonify({'error': 'AI service temporarily unavailable'}), 503
         
-        # Construct the enhanced prompt
+        # Construct the enhanced prompt with enhancement type
         constructed_prompt = prompt_constructor.construct_enhanced_prompt(
             user_input=user_prompt,
             nfr_requirements=all_nfrs,
             task_type=task_type,
             file_context=selected_files,
-            config=config
+            config=config,
+            enhancement_type=enhancement_type
         )
         
         # Get enhanced specification from LLM
         enhanced_result = prompt_constructor.enhance_with_llm(constructed_prompt)
         
-        logger.info(f"Successfully enhanced prompt for task_type: {task_type}")
+        logger.info(f"Successfully enhanced prompt for task_type: {task_type}, enhancement_type: {enhancement_type}")
         
         # Log successful response
         logging_service.log_api_request(
@@ -362,6 +365,7 @@ def enhance_prompt():
             request_data={
                 'prompt': user_prompt,
                 'task_type': task_type,
+                'enhancement_type': enhancement_type,
                 'selected_files_count': len(selected_files)
             },
             response_data={
@@ -375,13 +379,14 @@ def enhance_prompt():
             'enhanced_specification': enhanced_result['enhanced_specification'],
             'original_input': enhanced_result['original_input'],
             'task_type': enhanced_result['task_type'],
+            'enhancement_type': enhancement_type,
             'metadata': enhanced_result['metadata'],
             'logs': [
                 {
                     'type': 'user_input',
                     'content': user_prompt,
                     'timestamp': datetime.now().isoformat(),
-                    'metadata': {'task_type': task_type, 'file_count': len(selected_files)}
+                    'metadata': {'task_type': task_type, 'enhancement_type': enhancement_type, 'file_count': len(selected_files)}
                 },
                 {
                     'type': 'llm_prompt',

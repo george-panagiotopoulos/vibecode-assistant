@@ -19,6 +19,10 @@ const RequirementsEditor = () => {
   const [savedGraphs, setSavedGraphs] = useState([]);
   const [loadingGraphs, setLoadingGraphs] = useState(false);
 
+  // NEW: Layer visibility state management
+  // By default, all layers are collapsed (nodes hidden)
+  const [collapsedLayers, setCollapsedLayers] = useState(new Set());
+
   // Form states
   const [newNode, setNewNode] = useState({
     id: '',
@@ -57,6 +61,41 @@ const RequirementsEditor = () => {
   const [layers, setLayers] = useState([]);
   const [layersLoading, setLayersLoading] = useState(false);
   const [layersError, setLayersError] = useState(null);
+
+  /**
+   * Toggle visibility of nodes for a specific layer
+   * @param {string} layerName - The name of the layer to toggle
+   */
+  const toggleLayerVisibility = useCallback((layerName) => {
+    setCollapsedLayers(prevCollapsed => {
+      const newCollapsed = new Set(prevCollapsed);
+      if (newCollapsed.has(layerName)) {
+        newCollapsed.delete(layerName);
+      } else {
+        newCollapsed.add(layerName);
+      }
+      return newCollapsed;
+    });
+  }, []);
+
+  /**
+   * Check if a layer is currently collapsed (nodes hidden)
+   * @param {string} layerName - The name of the layer to check
+   * @returns {boolean} True if layer is collapsed, false if expanded
+   */
+  const isLayerCollapsed = useCallback((layerName) => {
+    return collapsedLayers.has(layerName);
+  }, [collapsedLayers]);
+
+  /**
+   * Initialize all layers as collapsed when layers are first loaded
+   * This ensures the default behavior of hiding nodes
+   */
+  const initializeLayerVisibility = useCallback((layerList) => {
+    const allLayersCollapsed = new Set(layerList);
+    setCollapsedLayers(allLayersCollapsed);
+  }, []);
+
   const edgeTypes = ['LINKED_TO', 'DEPENDS_ON', 'SUPPORTS', 'CONFLICTS_WITH', 'ENABLES'];
 
   // Dynamic layer color assignment
@@ -87,7 +126,11 @@ const RequirementsEditor = () => {
       const result = await response.json();
       
       if (result.success) {
-        setLayers(result.layers || []);
+        const layerList = result.layers || [];
+        setLayers(layerList);
+        
+        // Initialize all layers as collapsed (nodes hidden) by default
+        initializeLayerVisibility(layerList);
       } else {
         setLayersError(result.error || 'Failed to fetch layers');
       }
@@ -96,7 +139,7 @@ const RequirementsEditor = () => {
     } finally {
       setLayersLoading(false);
     }
-  }, []);
+  }, [initializeLayerVisibility]);
 
   // Validate layer name
   const validateLayerName = (name) => {
@@ -501,6 +544,120 @@ const RequirementsEditor = () => {
     return acc;
   }, {});
 
+  /**
+   * Reusable LayerHeader component for consistent layer display
+   * Includes toggle functionality, layer info, and action buttons
+   */
+  const LayerHeader = ({ layer, nodeCount, isCollapsed, onToggle, onEdit, onDelete }) => (
+    <div className="bg-vibe-darker p-4 rounded-t-lg border-b border-vibe-gray-dark">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {/* Layer color indicator */}
+          <div className={`w-4 h-4 rounded-full ${getLayerColor(layer)}`}></div>
+          
+          {/* Layer name and node count */}
+          <h4 className="font-semibold text-vibe-gray text-lg">{layer}</h4>
+          <span className="text-sm text-vibe-gray opacity-60">
+            ({nodeCount} node{nodeCount !== 1 ? 's' : ''})
+          </span>
+          
+          {/* Toggle button for showing/hiding nodes */}
+          <button
+            onClick={onToggle}
+            className="ml-2 px-3 py-1 text-xs bg-vibe-blue text-white rounded hover:bg-blue-600 transition-colors"
+            title={isCollapsed ? 'Show nodes' : 'Hide nodes'}
+          >
+            {isCollapsed ? '👁️ Show' : '🙈 Hide'} Nodes
+          </button>
+        </div>
+        
+        {/* Action buttons */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onEdit}
+            className="text-orange-500 hover:text-orange-400 text-sm px-2 py-1 rounded hover:bg-orange-500 hover:bg-opacity-20 transition-colors"
+            title={`Edit ${layer} layer`}
+          >
+            ✏️ Edit Layer
+          </button>
+          <button
+            onClick={onDelete}
+            className="text-vibe-red hover:text-red-400 text-sm px-2 py-1 rounded hover:bg-vibe-red hover:bg-opacity-20 transition-colors"
+            title={`Delete ${layer} layer and all its nodes`}
+          >
+            🗑️ Delete Layer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  /**
+   * Reusable NodeGrid component for displaying layer nodes
+   * Maintains existing styling and functionality
+   */
+  const NodeGrid = ({ nodes, edges, onEditNode, onDeleteNode }) => (
+    <div className="p-4">
+      {nodes.length === 0 ? (
+        <div className="text-center py-8 text-vibe-gray opacity-60">
+          No nodes in this layer yet
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {nodes.map(node => (
+            <div key={node.id} className="bg-vibe-dark p-4 rounded-lg border border-vibe-gray-dark hover:border-vibe-blue transition-colors">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-medium text-vibe-gray">{node.name}</span>
+                    <span className={`px-2 py-1 text-xs rounded ${getTypeColor(node.type)} text-white`}>
+                      {node.type}
+                    </span>
+                  </div>
+                  <p className="text-sm text-vibe-gray opacity-75 mb-2 line-clamp-2">{node.description}</p>
+                  <code className="text-xs text-vibe-blue bg-vibe-darker px-2 py-1 rounded">{node.id}</code>
+                </div>
+                <div className="flex flex-col gap-1 ml-2">
+                  <button
+                    onClick={() => onEditNode(node)}
+                    className="text-orange-500 hover:text-orange-400 text-sm opacity-60 hover:opacity-100"
+                    title="Edit node"
+                  >
+                    ✏️
+                  </button>
+                  <button
+                    onClick={() => onDeleteNode(node.id)}
+                    className="text-vibe-red hover:text-white text-sm opacity-60 hover:opacity-100"
+                    title="Delete node"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+              
+              {/* Node Relationships */}
+              <div className="mt-3 pt-3 border-t border-vibe-gray-dark">
+                <div className="text-xs text-vibe-gray opacity-75">
+                  {(() => {
+                    const incomingEdges = edges.filter(e => e.to_id === node.id);
+                    const outgoingEdges = edges.filter(e => e.from_id === node.id);
+                    const totalConnections = incomingEdges.length + outgoingEdges.length;
+                    
+                    if (totalConnections === 0) {
+                      return 'No connections';
+                    }
+                    
+                    return `${totalConnections} connection${totalConnections !== 1 ? 's' : ''} (${incomingEdges.length} in, ${outgoingEdges.length} out)`;
+                  })()}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   // Handle layer creation using new system
   const handleCreateLayer = async (e) => {
     e.preventDefault();
@@ -796,94 +953,24 @@ const RequirementsEditor = () => {
                     return (
                       <div key={layer} className="border border-vibe-gray-dark rounded-lg">
                         {/* Layer Header */}
-                        <div className="bg-vibe-darker p-4 rounded-t-lg border-b border-vibe-gray-dark">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-4 h-4 rounded-full ${getLayerColor(layer)}`}></div>
-                              <h4 className="font-semibold text-vibe-gray text-lg">{layer}</h4>
-                              <span className="text-sm text-vibe-gray opacity-60">
-                                ({layerNodes.length} node{layerNodes.length !== 1 ? 's' : ''})
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => handleEditLayer(layer)}
-                                className="text-orange-500 hover:text-orange-400 text-sm px-2 py-1 rounded hover:bg-orange-500 hover:bg-opacity-20 transition-colors"
-                                title={`Edit ${layer} layer`}
-                              >
-                                ✏️ Edit Layer
-                              </button>
-                              <button
-                                onClick={() => handleDeleteLayer(layer)}
-                                className="text-vibe-red hover:text-red-400 text-sm px-2 py-1 rounded hover:bg-vibe-red hover:bg-opacity-20 transition-colors"
-                                title={`Delete ${layer} layer and all its nodes`}
-                              >
-                                🗑️ Delete Layer
-                              </button>
-                            </div>
-                          </div>
-                        </div>
+                        <LayerHeader
+                          layer={layer}
+                          nodeCount={layerNodes.length}
+                          isCollapsed={isLayerCollapsed(layer)}
+                          onToggle={() => toggleLayerVisibility(layer)}
+                          onEdit={() => handleEditLayer(layer)}
+                          onDelete={() => handleDeleteLayer(layer)}
+                        />
                         
-                        {/* Layer Nodes */}
-                        <div className="p-4">
-                          {layerNodes.length === 0 ? (
-                            <div className="text-center py-8 text-vibe-gray opacity-60">
-                              No nodes in this layer yet
-                            </div>
-                          ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                              {layerNodes.map(node => (
-                                <div key={node.id} className="bg-vibe-dark p-4 rounded-lg border border-vibe-gray-dark hover:border-vibe-blue transition-colors">
-                                  <div className="flex items-start justify-between mb-3">
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <span className="font-medium text-vibe-gray">{node.name}</span>
-                                        <span className={`px-2 py-1 text-xs rounded ${getTypeColor(node.type)} text-white`}>
-                                          {node.type}
-                                        </span>
-                                      </div>
-                                      <p className="text-sm text-vibe-gray opacity-75 mb-2 line-clamp-2">{node.description}</p>
-                                      <code className="text-xs text-vibe-blue bg-vibe-darker px-2 py-1 rounded">{node.id}</code>
-                                    </div>
-                                    <div className="flex flex-col gap-1 ml-2">
-                                      <button
-                                        onClick={() => handleEditNode(node)}
-                                        className="text-orange-500 hover:text-orange-400 text-sm opacity-60 hover:opacity-100"
-                                        title="Edit node"
-                                      >
-                                        ✏️
-                                      </button>
-                                      <button
-                                        onClick={() => handleDeleteNode(node.id)}
-                                        className="text-vibe-red hover:text-white text-sm opacity-60 hover:opacity-100"
-                                        title="Delete node"
-                                      >
-                                        🗑️
-                                      </button>
-                                    </div>
-                                  </div>
-                                  
-                                  {/* Node Relationships */}
-                                  <div className="mt-3 pt-3 border-t border-vibe-gray-dark">
-                                    <div className="text-xs text-vibe-gray opacity-75">
-                                      {(() => {
-                                        const incomingEdges = edges.filter(e => e.to_id === node.id);
-                                        const outgoingEdges = edges.filter(e => e.from_id === node.id);
-                                        const totalConnections = incomingEdges.length + outgoingEdges.length;
-                                        
-                                        if (totalConnections === 0) {
-                                          return 'No connections';
-                                        }
-                                        
-                                        return `${totalConnections} connection${totalConnections !== 1 ? 's' : ''} (${incomingEdges.length} in, ${outgoingEdges.length} out)`;
-                                      })()}
-                                    </div>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                        {/* Layer Nodes - Only show when layer is not collapsed */}
+                        {!isLayerCollapsed(layer) && (
+                          <NodeGrid
+                            nodes={layerNodes}
+                            edges={edges}
+                            onEditNode={(node) => handleEditNode(node)}
+                            onDeleteNode={(nodeId) => handleDeleteNode(nodeId)}
+                          />
+                        )}
                       </div>
                     );
                   })

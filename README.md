@@ -205,14 +205,14 @@ npm start
 
 ## 🎯 **New Enhancement Modes**
 
-### 📋 **Full Specification**
-Generates comprehensive business requirements specifications perfect for detailed project documentation.
+### 📋 **Maximum Detail**
+Generates comprehensive step-by-step implementation guides with 15-25 detailed steps that cover all aspects of the development task. Each step includes specific technical details, actionable instructions, and considers all inputs including non-functional requirements, selected files, and project context.
 
-### 📝 **Plan**
-Creates concise, actionable step-by-step implementation plans (limited to 500 words for focused guidance).
+### 📝 **Balanced**
+Creates balanced step-by-step implementation plans with approximately 10 key steps that cover the most important aspects of the development task. Focuses on essential implementation details while maintaining clarity and conciseness.
 
-### ✨ **Clarity**
-Improves the language and structure of your existing prompts without adding new requirements or details.
+### ✨ **Key Requirements**
+Analyzes user requests to extract and identify core functional requirements, critical technical constraints, essential features, and key dependencies. Provides a structured breakdown of what needs to be built, highlighting the most important aspects and dependencies.
 
 ## 🔧 Configuration
 
