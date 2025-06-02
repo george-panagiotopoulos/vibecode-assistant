@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { ApiService } from './services/ApiService';
 import Sidebar from './components/Sidebar';
-import Header from './components/Header';
 import PromptBuilder from './components/PromptBuilder';
-import ConfigPanel from './components/ConfigPanel';
 import RequirementsEditor from './components/RequirementsEditor';
 import StatusBar from './components/StatusBar';
 import StreamingTest from './components/StreamingTest';
+import Dashboard from './components/Dashboard';
 
 const App = () => {
-  const [currentView, setCurrentView] = useState('builder');
+  const [currentView, setCurrentView] = useState('prompt');
   const [config, setConfig] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -100,10 +99,6 @@ const App = () => {
     });
   };
 
-  const handleViewChange = (viewId) => {
-    setCurrentView(viewId);
-  };
-
   const handlePromptEnhancement = async (prompt, taskType, selectedFiles) => {
     try {
       const response = await ApiService.enhancePrompt(prompt, taskType, selectedFiles);
@@ -116,20 +111,19 @@ const App = () => {
   const renderMainContent = () => {
     const workAreaContent = () => {
       switch (currentView) {
-        case 'builder':
+        case 'dashboard':
+          return (
+            <Dashboard
+              config={config}
+              onConfigUpdate={handleConfigUpdate}
+            />
+          );
+        case 'prompt':
           return (
             <PromptBuilder
               selectedFiles={selectedFiles}
               onPromptEnhancement={handlePromptEnhancement}
               config={config}
-            />
-          );
-        case 'config':
-          return (
-            <ConfigPanel
-              config={config}
-              onConfigUpdate={handleConfigUpdate}
-              loading={loading}
             />
           );
         case 'requirements':
@@ -151,7 +145,7 @@ const App = () => {
               <div className="text-center">
                 <div className="text-4xl mb-4">🎯</div>
                 <h2 className="text-xl mb-2">Welcome to Vibe Assistant</h2>
-                <p className="text-vibe-gray opacity-75">Select a tool from the header to get started</p>
+                <p className="text-vibe-gray opacity-75">Select a tool from the sidebar to get started</p>
               </div>
             </div>
           );
@@ -166,17 +160,9 @@ const App = () => {
   };
 
   return (
-    <div className="layout-grid bg-vibe-darkest text-vibe-gray">
-      {/* Header */}
-      <div className="col-span-2 bg-vibe-darker border-b border-vibe-gray-dark">
-        <Header 
-          currentView={currentView}
-          onViewChange={handleViewChange}
-        />
-      </div>
-
+    <div className="flex h-screen bg-vibe-darkest text-vibe-gray">
       {/* Sidebar */}
-      <div className="bg-vibe-dark border-r border-vibe-gray-dark">
+      <div className="w-80 bg-vibe-dark border-r border-vibe-gray-dark flex-shrink-0">
         <Sidebar
           activeView={currentView}
           onViewChange={setCurrentView}
@@ -188,21 +174,24 @@ const App = () => {
         />
       </div>
 
-      {/* Main Content */}
-      <div className="bg-vibe-dark overflow-hidden">
-        {renderMainContent()}
-      </div>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col">
+        {/* Main Content */}
+        <div className="flex-1 bg-vibe-dark overflow-hidden">
+          {renderMainContent()}
+        </div>
 
-      {/* Status Bar */}
-      <div className="col-span-2 bg-vibe-darker border-t border-vibe-gray-dark">
-        <StatusBar
-          loading={loading}
-          error={error}
-          message={statusMessage}
-          repositoryData={repositoryData}
-          selectedFiles={selectedFiles}
-          config={config}
-        />
+        {/* Status Bar */}
+        <div className="bg-vibe-darker border-t border-vibe-gray-dark">
+          <StatusBar
+            loading={loading}
+            error={error}
+            message={statusMessage}
+            repositoryData={repositoryData}
+            selectedFiles={selectedFiles}
+            config={config}
+          />
+        </div>
       </div>
     </div>
   );

@@ -3,8 +3,8 @@ import React from 'react';
 const Header = ({ currentView, onViewChange }) => {
   const views = [
     { id: 'builder', name: 'Prompt Builder', icon: '🔧' },
-    { id: 'config', name: 'Configuration', icon: '⚙️' },
-    { id: 'requirements', name: 'Requirements', icon: '📋' },
+    { id: 'config', name: 'Requirements', icon: '📋' },
+    { id: 'requirements', name: 'Configuration', icon: '⚙️' },
     { id: 'streaming', name: 'Streaming Test', icon: '🚀' }
   ];
 

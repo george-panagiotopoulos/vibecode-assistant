@@ -31,6 +31,28 @@ A modern, intelligent coding assistant that helps developers enhance their promp
 - **Real-time Updates**: Live feedback and status indicators
 - **Intuitive Navigation**: Clean, modern interface design
 
+### 🏗️ **Hierarchical Software Planning** (NEW)
+- **Graph-Based Modeling**: Model software concerns as nodes with relationships across multiple abstraction layers
+- **Multi-Layer Architecture**: Organize concerns across UX, Architecture, Application, Infrastructure, and Security layers
+- **Relationship Management**: Define dependencies, support relationships, and conflicts between concerns
+- **Neo4j Integration**: Powered by Neo4j graph database for complex relationship queries
+- **Sample Data**: Pre-configured examples demonstrating software planning best practices
+- **Interactive Visualization**: View and manage nodes grouped by layer with relationship mapping
+
+#### Supported Layers:
+- **UX**: User experience and usability concerns
+- **Architecture**: System design patterns and architectural decisions  
+- **Application**: Code structure, practices, and development standards
+- **Infrastructure**: Performance, availability, and deployment concerns
+- **Security**: Security practices, trust requirements, and compliance
+
+#### Relationship Types:
+- **DEPENDS_ON**: Dependency relationships between concerns
+- **SUPPORTS**: Supporting relationships that enable other concerns
+- **LINKED_TO**: General associations between related concerns
+- **CONFLICTS_WITH**: Conflicting requirements that need resolution
+- **ENABLES**: Relationships where one concern enables another
+
 ## 🏗️ **Project Structure**
 
 The project follows a clean, organized structure with clear separation of concerns:
@@ -84,6 +106,7 @@ vibe-assistant/
 ### Prerequisites
 - **Node.js** (v16 or higher)
 - **Python 3.8+**
+- **Docker & Docker Compose** (for Neo4j graph database)
 - **AWS Account** with Bedrock access
 - **GitHub Account** (optional)
 
@@ -178,6 +201,7 @@ npm start
 ### 6. Access the Application
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:5000
+- **Neo4j Browser**: http://localhost:7474 (user: neo4j, password: vibeassistant)
 
 ## 🎯 **New Enhancement Modes**
 
@@ -227,6 +251,15 @@ Customize the AI enhancement behavior by editing requirements in the Configurati
 ### AI & Prompt Enhancement
 - `POST /api/enhance-prompt` - Enhance prompts with AI
 - `POST /api/stream-response` - Stream AI responses in real-time
+
+### Graph Database (NEW)
+- `GET /api/graph/nodes` - Fetch all nodes and edges
+- `POST /api/graph/nodes` - Create a new node
+- `POST /api/graph/edges` - Create a new relationship
+- `POST /api/graph/sample` - Load sample data
+- `DELETE /api/graph/nodes/{id}` - Delete a node
+- `DELETE /api/graph/edges/{from}/{to}` - Delete a relationship
+- `POST /api/graph/clear` - Clear all data
 
 ## 🎯 Usage Examples
 
@@ -313,6 +346,11 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 2. **Missing dependencies**: Run `npm run setup` to install all dependencies
 3. **AWS connection issues**: Verify credentials and region in Configuration panel
 4. **GitHub API limits**: Ensure you have a valid GitHub token
+5. **Neo4j connection issues**: 
+   - Ensure Docker is running: `docker ps`
+   - Check Neo4j status: `cd database && docker-compose ps`
+   - Restart Neo4j: `cd database && docker-compose restart`
+   - View logs: `cd database && docker-compose logs neo4j`
 
 ### Getting Help
 

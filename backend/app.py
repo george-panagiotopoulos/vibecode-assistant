@@ -16,6 +16,7 @@ from services.prompt_service import PromptService
 from services.config_service import ConfigService
 from services.prompt_constructor import PromptConstructor
 from services.logging_service import logging_service
+from services.neo4j_service import Neo4jService
 
 # Configure logging EARLY
 log_level = env_loader.get_env('LOG_LEVEL', 'INFO')
@@ -72,6 +73,14 @@ except Exception as e:
     logger.error(f"❌ PromptConstructor failed: {e}")
     raise
 
+try:
+    neo4j_service = Neo4jService()
+    logger.info("✅ Neo4jService initialized")
+except Exception as e:
+    logger.error(f"❌ Neo4jService failed: {e}")
+    # Don't raise here - Neo4j is optional for basic functionality
+    neo4j_service = None
+
 # FORCE CHECK CONFIGURATION AT STARTUP
 try:
     startup_config = config_service.get_config()
@@ -123,6 +132,88 @@ def handle_config():
         except Exception as e:
             logger.error(f"Error updating config: {str(e)}")
             return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/test-connection/<service>', methods=['POST'])
+def test_service_connection(service):
+    """Test connection to various services"""
+    try:
+        data = request.json or {}
+        
+        if service == 'aws':
+            # Test AWS Bedrock connection
+            try:
+                # Temporarily update bedrock service with new credentials if provided
+                if 'aws' in data:
+                    aws_config = data['aws']
+                    # Create a temporary bedrock service instance for testing
+                    import boto3
+                    from services.bedrock_service import BedrockService
+                    
+                    # Test with provided credentials
+                    session = boto3.Session(
+                        aws_access_key_id=aws_config.get('access_key_id'),
+                        aws_secret_access_key=aws_config.get('secret_access_key'),
+                        region_name=aws_config.get('region', 'us-east-1')
+                    )
+                    
+                    bedrock_client = session.client('bedrock-runtime')
+                    
+                    # Simple test call
+                    response = bedrock_client.list_foundation_models()
+                    return jsonify({"success": True, "message": "AWS Bedrock connection successful"})
+                else:
+                    # Test with current service
+                    if bedrock_service.test_connection():
+                        return jsonify({"success": True, "message": "AWS Bedrock connection successful"})
+                    else:
+                        return jsonify({"success": False, "error": "AWS Bedrock connection failed"})
+                        
+            except Exception as e:
+                return jsonify({"success": False, "error": f"AWS connection failed: {str(e)}"})
+        
+        elif service == 'github':
+            # Test GitHub connection
+            try:
+                github_config = data.get('github', {})
+                token = github_config.get('token') or os.environ.get('GITHUB_TOKEN')
+                
+                if not token:
+                    return jsonify({"success": False, "error": "GitHub token not provided"})
+                
+                # Test GitHub API access
+                import requests
+                headers = {'Authorization': f'token {token}'}
+                response = requests.get('https://api.github.com/user', headers=headers)
+                
+                if response.status_code == 200:
+                    user_data = response.json()
+                    return jsonify({
+                        "success": True, 
+                        "message": f"GitHub connection successful (user: {user_data.get('login', 'unknown')})"
+                    })
+                else:
+                    return jsonify({"success": False, "error": f"GitHub API error: {response.status_code}"})
+                    
+            except Exception as e:
+                return jsonify({"success": False, "error": f"GitHub connection failed: {str(e)}"})
+        
+        elif service == 'neo4j':
+            # Test Neo4j connection
+            try:
+                if neo4j_service and neo4j_service.is_connected():
+                    return jsonify({"success": True, "message": "Neo4j connection successful"})
+                else:
+                    return jsonify({"success": False, "error": "Neo4j service not available or not connected"})
+                    
+            except Exception as e:
+                return jsonify({"success": False, "error": f"Neo4j connection failed: {str(e)}"})
+        
+        else:
+            return jsonify({"success": False, "error": f"Unknown service: {service}"}), 400
+            
+    except Exception as e:
+        logger.error(f"Error testing {service} connection: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/repositories/files', methods=['POST'])
 def get_repository_files():
@@ -478,30 +569,210 @@ def analyze_repository():
 
 @app.route('/api/log-frontend-error', methods=['POST'])
 def log_frontend_error():
-    """Receive and log frontend errors"""
+    """Log frontend errors to backend"""
     try:
         data = request.get_json()
-        
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
+        error_message = data.get('message', 'Unknown error')
+        error_stack = data.get('stack', '')
+        error_url = data.get('url', '')
         
         # Log the frontend error
-        logging_service.log_error(
-            error_type="frontend_error",
-            error_message=data.get('message', 'Unknown frontend error'),
-            context={
-                'frontend_data': data,
-                'timestamp': data.get('timestamp'),
-                'url': data.get('url'),
-                'user_agent': data.get('userAgent')
-            }
-        )
+        logger.error(f"Frontend Error: {error_message}")
+        logger.error(f"URL: {error_url}")
+        if error_stack:
+            logger.error(f"Stack: {error_stack}")
+        
+        # Also log to the logging service
+        logging_service.log_error(f"Frontend: {error_message}", {
+            'stack': error_stack,
+            'url': error_url,
+            'source': 'frontend'
+        })
         
         return jsonify({'success': True, 'message': 'Error logged successfully'})
         
     except Exception as e:
         logger.error(f"Error logging frontend error: {str(e)}")
         return jsonify({'error': 'Failed to log error'}), 500
+
+# Graph API Routes
+@app.route('/api/graph/nodes', methods=['GET', 'POST'])
+def handle_graph_nodes():
+    """Handle graph nodes - GET all nodes and edges, POST create/update node"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    if request.method == 'GET':
+        try:
+            graph_data = neo4j_service.get_all_nodes_and_edges()
+            return jsonify({"success": True, "data": graph_data})
+        except Exception as e:
+            logger.error(f"Error getting graph nodes: {str(e)}")
+            return jsonify({"success": False, "error": str(e)}), 500
+    
+    elif request.method == 'POST':
+        try:
+            node_data = request.json
+            
+            # Validate required fields
+            if not node_data or 'id' not in node_data or 'name' not in node_data:
+                return jsonify({"success": False, "error": "Node ID and name are required"}), 400
+            
+            created_node = neo4j_service.create_node(node_data)
+            return jsonify({"success": True, "node": created_node})
+        except Exception as e:
+            logger.error(f"Error creating graph node: {str(e)}")
+            return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/edges', methods=['POST'])
+def create_graph_edge():
+    """Create an edge between two nodes"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        edge_data = request.json
+        
+        # Validate required fields
+        if not edge_data or 'from_id' not in edge_data or 'to_id' not in edge_data:
+            return jsonify({"success": False, "error": "from_id and to_id are required"}), 400
+        
+        from_id = edge_data['from_id']
+        to_id = edge_data['to_id']
+        relationship_type = edge_data.get('type', 'LINKED_TO')
+        
+        created_edge = neo4j_service.create_edge(from_id, to_id, relationship_type)
+        return jsonify({"success": True, "edge": created_edge})
+    except Exception as e:
+        logger.error(f"Error creating graph edge: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/sample', methods=['POST'])
+def populate_sample_graph():
+    """Populate the graph with sample data"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        sample_data = neo4j_service.populate_sample_data()
+        return jsonify({"success": True, "data": sample_data})
+    except Exception as e:
+        logger.error(f"Error populating sample data: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/nodes/<node_id>', methods=['DELETE'])
+def delete_graph_node(node_id):
+    """Delete a specific node"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        deleted = neo4j_service.delete_node(node_id)
+        if deleted:
+            return jsonify({"success": True, "message": "Node deleted successfully"})
+        else:
+            return jsonify({"success": False, "error": "Node not found"}), 404
+    except Exception as e:
+        logger.error(f"Error deleting graph node: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/edges/<from_id>/<to_id>', methods=['DELETE'])
+def delete_graph_edge(from_id, to_id):
+    """Delete an edge between two nodes"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        relationship_type = request.args.get('type')
+        deleted = neo4j_service.delete_edge(from_id, to_id, relationship_type)
+        if deleted:
+            return jsonify({"success": True, "message": "Edge deleted successfully"})
+        else:
+            return jsonify({"success": False, "error": "Edge not found"}), 404
+    except Exception as e:
+        logger.error(f"Error deleting graph edge: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/edges', methods=['DELETE'])
+def delete_graph_edge_json():
+    """Delete an edge between two nodes using JSON body"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        data = request.json
+        from_id = data.get('fromId')
+        to_id = data.get('toId')
+        edge_type = data.get('edgeType')
+        
+        if not from_id or not to_id:
+            return jsonify({"success": False, "error": "fromId and toId are required"}), 400
+        
+        deleted = neo4j_service.delete_edge(from_id, to_id, edge_type)
+        if deleted:
+            return jsonify({"success": True, "message": "Edge deleted successfully"})
+        else:
+            return jsonify({"success": False, "error": "Edge not found"}), 404
+    except Exception as e:
+        logger.error(f"Error deleting graph edge: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/layers/<layer_name>', methods=['DELETE'])
+def delete_graph_layer(layer_name):
+    """Delete all nodes in a specific layer"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        deleted_count = neo4j_service.delete_layer(layer_name)
+        return jsonify({
+            "success": True, 
+            "message": f"Layer '{layer_name}' deleted successfully",
+            "deleted_nodes": deleted_count
+        })
+    except Exception as e:
+        logger.error(f"Error deleting graph layer: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/clear', methods=['POST'])
+def clear_graph():
+    """Clear all graph data"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        neo4j_service.clear_all_data()
+        return jsonify({"success": True, "message": "All graph data cleared"})
+    except Exception as e:
+        logger.error(f"Error clearing graph data: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/test-connection/aws', methods=['POST'])
+def test_aws_connection():
+    """Test AWS Bedrock connection"""
+    try:
+        # Test the connection using the existing bedrock service
+        success = bedrock_service.test_connection()
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'AWS Bedrock connection successful',
+                'model_id': bedrock_service.model_id,
+                'region': os.getenv('AWS_DEFAULT_REGION', 'us-east-1')
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'AWS Bedrock connection failed'
+            })
+            
+    except Exception as e:
+        logger.error(f"AWS connection test error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'AWS connection failed: {str(e)}'
+        })
 
 @app.errorhandler(404)
 def not_found(error):

@@ -11,6 +11,7 @@ class ConfigService:
     
     def __init__(self, config_file='config/user_config.json'):
         self.config_file = config_file
+        self.env_file = '.env'
         # Force environment loading
         env_loader.ensure_loaded()
         self.ensure_config_file_exists()
@@ -110,7 +111,7 @@ class ConfigService:
                 'access_key_id': env_loader.get_env('AWS_ACCESS_KEY_ID', ''),
                 'secret_access_key': env_loader.get_env('AWS_SECRET_ACCESS_KEY', ''),
                 'region': env_loader.get_env('AWS_DEFAULT_REGION', 'us-east-1'),
-                'bedrock_model_id': env_loader.get_env('AWS_BEDROCK_MODEL_ID', 'anthropic.claude-3-5-sonnet-20240620-v1:0')
+                'model_id': env_loader.get_env('AWS_BEDROCK_MODEL_ID', 'anthropic.claude-3-5-sonnet-20240620-v1:0')
             }
             
             config['github'] = {
@@ -118,9 +119,16 @@ class ConfigService:
                 'default_repo': env_loader.get_env('GITHUB_DEFAULT_REPO', '')
             }
             
+            config['neo4j'] = {
+                'uri': env_loader.get_env('NEO4J_URI', 'bolt://localhost:7687'),
+                'username': env_loader.get_env('NEO4J_USERNAME', 'neo4j'),
+                'password': env_loader.get_env('NEO4J_PASSWORD', 'vibeassistant')
+            }
+            
             # LOG what we're returning
             logger.debug(f"Config loaded - GitHub repo: {config['github']['default_repo']}")
             logger.debug(f"Config loaded - AWS key set: {bool(config['aws']['access_key_id'])}")
+            logger.debug(f"Config loaded - Neo4j URI: {config['neo4j']['uri']}")
             
             return config
         except FileNotFoundError:
@@ -135,20 +143,64 @@ class ConfigService:
             raise Exception(f"Failed to read configuration: {str(e)}")
     
     def update_config(self, updates: Dict[str, Any]) -> Dict[str, Any]:
-        """Update configuration with new values"""
+        """Update configuration with new values and save to .env file"""
         try:
+            # Handle environment variable updates
+            env_updates = {}
+            
+            # Extract AWS config for .env
+            if 'aws' in updates:
+                aws_config = updates['aws']
+                if 'access_key_id' in aws_config:
+                    env_updates['AWS_ACCESS_KEY_ID'] = aws_config['access_key_id']
+                if 'secret_access_key' in aws_config:
+                    env_updates['AWS_SECRET_ACCESS_KEY'] = aws_config['secret_access_key']
+                if 'region' in aws_config:
+                    env_updates['AWS_DEFAULT_REGION'] = aws_config['region']
+                if 'model_id' in aws_config:
+                    env_updates['AWS_BEDROCK_MODEL_ID'] = aws_config['model_id']
+            
+            # Extract GitHub config for .env
+            if 'github' in updates:
+                github_config = updates['github']
+                if 'token' in github_config:
+                    env_updates['GITHUB_TOKEN'] = github_config['token']
+                if 'default_repo' in github_config:
+                    env_updates['GITHUB_DEFAULT_REPO'] = github_config['default_repo']
+            
+            # Extract Neo4j config for .env
+            if 'neo4j' in updates:
+                neo4j_config = updates['neo4j']
+                if 'uri' in neo4j_config:
+                    env_updates['NEO4J_URI'] = neo4j_config['uri']
+                if 'username' in neo4j_config:
+                    env_updates['NEO4J_USERNAME'] = neo4j_config['username']
+                if 'password' in neo4j_config:
+                    env_updates['NEO4J_PASSWORD'] = neo4j_config['password']
+            
+            # Update .env file
+            if env_updates:
+                self._update_env_file(env_updates)
+            
             # Load current config from file (without env overrides)
             with open(self.config_file, 'r') as f:
                 config = json.load(f)
             
-            # Deep merge the updates
-            config = self._deep_merge(config, updates)
+            # Remove AWS, GitHub, and Neo4j from updates as they go to .env
+            filtered_updates = {k: v for k, v in updates.items() if k not in ['aws', 'github', 'neo4j']}
             
-            # Save updated config to file
-            with open(self.config_file, 'w') as f:
-                json.dump(config, f, indent=2)
+            # Deep merge the remaining updates
+            if filtered_updates:
+                config = self._deep_merge(config, filtered_updates)
+                
+                # Save updated config to file
+                with open(self.config_file, 'w') as f:
+                    json.dump(config, f, indent=2)
             
             logger.info("Configuration updated successfully")
+            
+            # Force reload environment variables
+            env_loader.ensure_loaded()
             
             # Return the merged config with environment variables
             return self.get_config()
@@ -156,6 +208,33 @@ class ConfigService:
         except Exception as e:
             logger.error(f"Error updating config: {str(e)}")
             raise Exception(f"Failed to update configuration: {str(e)}")
+    
+    def _update_env_file(self, env_updates: Dict[str, str]):
+        """Update the .env file with new environment variables"""
+        try:
+            # Read existing .env file
+            env_vars = {}
+            if os.path.exists(self.env_file):
+                with open(self.env_file, 'r') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith('#') and '=' in line:
+                            key, value = line.split('=', 1)
+                            env_vars[key] = value
+            
+            # Update with new values
+            env_vars.update(env_updates)
+            
+            # Write back to .env file
+            with open(self.env_file, 'w') as f:
+                for key, value in env_vars.items():
+                    f.write(f"{key}={value}\n")
+            
+            logger.info(f"Updated .env file with {len(env_updates)} variables")
+            
+        except Exception as e:
+            logger.error(f"Error updating .env file: {str(e)}")
+            raise Exception(f"Failed to update .env file: {str(e)}")
     
     def _deep_merge(self, base: Dict, updates: Dict) -> Dict:
         """Deep merge two dictionaries"""
@@ -327,4 +406,12 @@ class ConfigService:
             
         except Exception as e:
             logger.error(f"Error backing up config: {str(e)}")
-            raise Exception(f"Failed to backup configuration: {str(e)}") 
+            raise Exception(f"Failed to backup configuration: {str(e)}")
+    
+    def get_neo4j_config(self) -> Dict[str, str]:
+        """Get Neo4j configuration"""
+        return {
+            'uri': env_loader.get_env('NEO4J_URI', 'bolt://localhost:7687'),
+            'username': env_loader.get_env('NEO4J_USERNAME', 'neo4j'),
+            'password': env_loader.get_env('NEO4J_PASSWORD', 'vibeassistant')
+        } 

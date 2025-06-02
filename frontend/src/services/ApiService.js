@@ -85,11 +85,25 @@ export const ApiService = {
     return response.data.config;
   },
 
+  // Test service connections
+  async testConnection(service, config = {}) {
+    const response = await api.post(`/api/test-connection/${service}`, config);
+    return response.data;
+  },
+
   // GitHub operations
   async cloneRepository(repoUrl, branch = 'main') {
     const response = await api.post('/api/github/clone', {
       repo_url: repoUrl,
       branch: branch
+    });
+    return response.data;
+  },
+
+  async loadRepository(repoUrl, config = {}) {
+    const response = await api.post('/api/repositories/files', {
+      repo_url: repoUrl,
+      github_token: config.github?.token
     });
     return response.data;
   },

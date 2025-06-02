@@ -1,46 +1,19 @@
-.App {
-  text-align: center;
+/* Vibe Assistant - Additional Application Styles */
+
+/* Custom scrollbar styles for specific components */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: #1e1e1e;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #3c3c3c;
+  border-radius: 3px;
 }
 
-.App-header {
-  background-color: #282c34;
-  padding: 20px;
-  color: white;
-}
-
-.App-link {
-  color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-/* Custom styles for the main app layout */
-.items-center {
-  align-items: center;
-}
-
-.justify-center {
-  justify-content: center;
-}
-
-.ml-2 {
-  margin-left: 8px;
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: #007acc;
 } 
