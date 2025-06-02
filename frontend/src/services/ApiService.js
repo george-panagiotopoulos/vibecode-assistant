@@ -322,6 +322,53 @@ export const ApiService = {
     return response.data;
   },
 
+  async createGraphNode(nodeData) {
+    const response = await api.post('/api/graph/nodes', nodeData);
+    return response.data;
+  },
+
+  async updateGraphNode(nodeId, nodeData) {
+    const response = await api.put(`/api/graph/nodes/${nodeId}`, nodeData);
+    return response.data;
+  },
+
+  async deleteGraphNode(nodeId) {
+    const response = await api.delete(`/api/graph/nodes/${nodeId}`);
+    return response.data;
+  },
+
+  async getGraphLayers() {
+    const response = await api.get('/api/graph/layers');
+    return response.data;
+  },
+
+  async createGraphLayer(layerData) {
+    const response = await api.post('/api/graph/layers', layerData);
+    return response.data;
+  },
+
+  async updateGraphLayer(layerName, layerData) {
+    const response = await api.put(`/api/graph/layers/${encodeURIComponent(layerName)}`, layerData);
+    return response.data;
+  },
+
+  async deleteGraphLayer(layerName) {
+    const response = await api.delete(`/api/graph/layers/${encodeURIComponent(layerName)}`);
+    return response.data;
+  },
+
+  async createGraphEdge(edgeData) {
+    const response = await api.post('/api/graph/edges', edgeData);
+    return response.data;
+  },
+
+  async deleteGraphEdge(fromId, toId, edgeType) {
+    const response = await api.delete('/api/graph/edges', {
+      data: { fromId, toId, edgeType }
+    });
+    return response.data;
+  },
+
   // Utility methods
   validateGitHubUrl(url) {
     const githubRegex = /^https:\/\/github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/?$/;

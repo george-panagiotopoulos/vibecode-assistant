@@ -1,0 +1,94 @@
+@startuml github-integration
+!theme vibedark
+title "GitHub Repository Integration Flow"
+
+skinparam backgroundColor #1e1e1e
+skinparam participantBackgroundColor #252526
+skinparam participantBorderColor #3c3c3c
+skinparam sequenceArrowColor #007acc
+skinparam noteBackgroundColor #252526
+skinparam noteBorderColor #3c3c3c
+
+actor User as user
+participant "GitHubIntegration\n<<Component>>" as frontend
+participant "ApiService\n<<Service>>" as api
+participant "Flask App\n<<Controller>>" as flask
+participant "GitHubService\n<<Service>>" as github_service
+participant "Neo4jService\n<<Service>>" as neo4j
+participant "GitHub API\n<<External>>" as github_api
+
+== Repository Connection ==
+
+user -> frontend: Enter repository URL
+activate frontend
+
+frontend -> api: POST /api/github/connect
+activate api
+
+api -> flask: POST /api/github/connect
+activate flask
+
+flask -> github_service: connect_repository(repo_url)
+activate github_service
+
+github_service -> github_api: GET /repos/{owner}/{repo}
+activate github_api
+github_api --> github_service: repository_metadata
+deactivate github_api
+
+github_service -> neo4j: CREATE (r:Repository)
+activate neo4j
+neo4j --> github_service: repository_node_id
+deactivate neo4j
+
+github_service --> flask: connection_result
+deactivate github_service
+
+flask --> api: JSON response
+deactivate flask
+
+api --> frontend: connection_status
+deactivate api
+
+frontend --> user: Show connection success
+deactivate frontend
+
+== Repository Analysis ==
+
+user -> frontend: Start analysis
+activate frontend
+
+frontend -> api: POST /api/github/analyze
+activate api
+
+api -> flask: POST /api/github/analyze
+activate flask
+
+flask -> github_service: analyze_repository()
+activate github_service
+
+github_service -> github_api: GET repository contents
+activate github_api
+github_api --> github_service: file_structure
+deactivate github_api
+
+loop For each file
+    github_service -> neo4j: CREATE (f:File)
+    activate neo4j
+    neo4j --> github_service: file_created
+    deactivate neo4j
+end
+
+github_service --> flask: analysis_complete
+deactivate github_service
+
+flask --> api: JSON response
+deactivate flask
+
+api --> frontend: analysis_results
+deactivate api
+
+frontend --> user: Display results
+deactivate frontend
+
+@enduml 

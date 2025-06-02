@@ -8,6 +8,10 @@ const RequirementsEditor = () => {
   const [showAddNode, setShowAddNode] = useState(false);
   const [showAddEdge, setShowAddEdge] = useState(false);
   const [showAddLayer, setShowAddLayer] = useState(false);
+  const [showEditNode, setShowEditNode] = useState(false);
+  const [showEditLayer, setShowEditLayer] = useState(false);
+  const [editingNode, setEditingNode] = useState(null);
+  const [editingLayer, setEditingLayer] = useState(null);
   const [showGraphVisualization, setShowGraphVisualization] = useState(false);
   const [showSaveGraph, setShowSaveGraph] = useState(false);
   const [showLoadGraph, setShowLoadGraph] = useState(false);
@@ -34,6 +38,19 @@ const RequirementsEditor = () => {
     name: '',
     description: '',
     color: 'bg-blue-500'
+  });
+
+  const [editNodeForm, setEditNodeForm] = useState({
+    id: '',
+    name: '',
+    description: '',
+    layer: '',
+    type: 'requirement'
+  });
+
+  const [editLayerForm, setEditLayerForm] = useState({
+    name: '',
+    description: ''
   });
 
   // NEW LAYER MANAGEMENT SYSTEM - Backend Only
@@ -431,6 +448,34 @@ const RequirementsEditor = () => {
     }
   };
 
+  // Delete specific saved graph
+  const handleDeleteGraph = async (graphName) => {
+    if (!window.confirm(`Are you sure you want to permanently delete the saved graph "${graphName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setLoadingGraphs(true);
+    try {
+      const response = await fetch(`/api/graph/saved/${encodeURIComponent(graphName)}`, {
+        method: 'DELETE'
+      });
+      
+      const result = await response.json();
+      if (result.success) {
+        setError(null);
+        // Refresh the saved graphs list
+        await loadSavedGraphs();
+        alert(`Graph "${graphName}" deleted successfully!`);
+      } else {
+        setError(result.error || 'Failed to delete graph');
+      }
+    } catch (err) {
+      setError('Network error: ' + err.message);
+    } finally {
+      setLoadingGraphs(false);
+    }
+  };
+
   // Open load graph modal and fetch saved graphs
   const openLoadGraphModal = () => {
     setShowLoadGraph(true);
@@ -474,6 +519,148 @@ const RequirementsEditor = () => {
     if (success) {
       setError(null);
     }
+  };
+
+  // Edit handlers
+  const handleEditNode = (node) => {
+    setEditingNode(node);
+    setEditNodeForm({
+      id: node.id,
+      name: node.name,
+      description: node.description,
+      layer: node.layer,
+      type: node.type
+    });
+    setShowEditNode(true);
+  };
+
+  const handleEditLayer = (layerName) => {
+    setEditingLayer(layerName);
+    setEditLayerForm({
+      name: layerName,
+      description: '' // We don't have layer descriptions in the current data structure
+    });
+    setShowEditLayer(true);
+  };
+
+  const handleUpdateNode = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/graph/nodes/${editingNode.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editNodeForm.name,
+          description: editNodeForm.description,
+          layer: editNodeForm.layer,
+          type: editNodeForm.type
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Update the local state
+        setNodes(prevNodes => 
+          prevNodes.map(node => 
+            node.id === editingNode.id ? result.node : node
+          )
+        );
+        
+        setShowEditNode(false);
+        setEditingNode(null);
+        setEditNodeForm({
+          id: '',
+          name: '',
+          description: '',
+          layer: '',
+          type: 'requirement'
+        });
+      } else {
+        setError(result.error || 'Failed to update node');
+      }
+    } catch (error) {
+      console.error('Error updating node:', error);
+      setError(error.message || 'Failed to update node');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateLayer = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/graph/layers/${encodeURIComponent(editingLayer)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editLayerForm.name,
+          description: editLayerForm.description
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // If layer name changed, update all affected nodes and layers list
+        if (editingLayer !== editLayerForm.name) {
+          setNodes(prevNodes => 
+            prevNodes.map(node => 
+              node.layer === editingLayer 
+                ? { ...node, layer: editLayerForm.name }
+                : node
+            )
+          );
+          
+          setLayers(prevLayers => 
+            prevLayers.map(layer => 
+              layer === editingLayer ? editLayerForm.name : layer
+            )
+          );
+        }
+        
+        setShowEditLayer(false);
+        setEditingLayer(null);
+        setEditLayerForm({
+          name: '',
+          description: ''
+        });
+      } else {
+        setError(result.error || 'Failed to update layer');
+      }
+    } catch (error) {
+      console.error('Error updating layer:', error);
+      setError(error.message || 'Failed to update layer');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cancelEditNode = () => {
+    setShowEditNode(false);
+    setEditingNode(null);
+    setEditNodeForm({
+      id: '',
+      name: '',
+      description: '',
+      layer: '',
+      type: 'requirement'
+    });
+  };
+
+  const cancelEditLayer = () => {
+    setShowEditLayer(false);
+    setEditingLayer(null);
+    setEditLayerForm({
+      name: '',
+      description: ''
+    });
   };
 
   useEffect(() => {
@@ -620,6 +807,13 @@ const RequirementsEditor = () => {
                             </div>
                             <div className="flex items-center gap-2">
                               <button
+                                onClick={() => handleEditLayer(layer)}
+                                className="text-vibe-blue hover:text-blue-400 text-sm px-2 py-1 rounded hover:bg-vibe-blue hover:bg-opacity-20 transition-colors"
+                                title={`Edit ${layer} layer`}
+                              >
+                                ✏️ Edit Layer
+                              </button>
+                              <button
                                 onClick={() => handleDeleteLayer(layer)}
                                 className="text-vibe-red hover:text-red-400 text-sm px-2 py-1 rounded hover:bg-vibe-red hover:bg-opacity-20 transition-colors"
                                 title={`Delete ${layer} layer and all its nodes`}
@@ -651,13 +845,22 @@ const RequirementsEditor = () => {
                                       <p className="text-sm text-vibe-gray opacity-75 mb-2 line-clamp-2">{node.description}</p>
                                       <code className="text-xs text-vibe-blue bg-vibe-darker px-2 py-1 rounded">{node.id}</code>
                                     </div>
-                                    <button
-                                      onClick={() => handleDeleteNode(node.id)}
-                                      className="text-vibe-red hover:text-white text-sm ml-2 opacity-60 hover:opacity-100"
-                                      title="Delete node"
-                                    >
-                                      🗑️
-                                    </button>
+                                    <div className="flex flex-col gap-1 ml-2">
+                                      <button
+                                        onClick={() => handleEditNode(node)}
+                                        className="text-vibe-blue hover:text-blue-400 text-sm opacity-60 hover:opacity-100"
+                                        title="Edit node"
+                                      >
+                                        ✏️
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteNode(node.id)}
+                                        className="text-vibe-red hover:text-white text-sm opacity-60 hover:opacity-100"
+                                        title="Delete node"
+                                      >
+                                        🗑️
+                                      </button>
+                                    </div>
                                   </div>
                                   
                                   {/* Node Relationships */}
@@ -1198,6 +1401,155 @@ const RequirementsEditor = () => {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Node Modal */}
+      {showEditNode && editingNode && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-vibe-darker p-6 rounded-lg border border-vibe-gray-dark w-full max-w-md">
+            <h3 className="text-lg font-medium text-vibe-gray mb-4">Edit Node</h3>
+            
+            <form onSubmit={handleUpdateNode} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-vibe-gray mb-2">Node ID</label>
+                <input
+                  type="text"
+                  value={editNodeForm.id}
+                  className="input-primary w-full bg-vibe-gray-dark opacity-50 cursor-not-allowed"
+                  disabled
+                  title="Node ID cannot be changed"
+                />
+                <p className="text-xs text-vibe-gray opacity-60 mt-1">Node ID cannot be modified</p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-vibe-gray mb-2">Name</label>
+                <input
+                  type="text"
+                  value={editNodeForm.name}
+                  onChange={(e) => setEditNodeForm({...editNodeForm, name: e.target.value})}
+                  className="input-primary w-full"
+                  placeholder="e.g., Performance Optimization"
+                  required
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-vibe-gray mb-2">Description</label>
+                <textarea
+                  value={editNodeForm.description}
+                  onChange={(e) => setEditNodeForm({...editNodeForm, description: e.target.value})}
+                  className="input-primary w-full h-20 resize-none"
+                  placeholder="Describe this requirement..."
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-vibe-gray mb-2">Layer</label>
+                <select
+                  value={editNodeForm.layer}
+                  onChange={(e) => setEditNodeForm({...editNodeForm, layer: e.target.value})}
+                  className="input-primary w-full"
+                  disabled={layers.length === 0}
+                >
+                  {layers.length === 0 ? (
+                    <option value="">No layers available</option>
+                  ) : (
+                    layers.map(layer => (
+                      <option key={layer} value={layer}>{layer}</option>
+                    ))
+                  )}
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-vibe-gray mb-2">Type</label>
+                <select
+                  value={editNodeForm.type}
+                  onChange={(e) => setEditNodeForm({...editNodeForm, type: e.target.value})}
+                  className="input-primary w-full"
+                >
+                  <option value="requirement">Requirement</option>
+                  <option value="constraint">Constraint</option>
+                  <option value="goal">Goal</option>
+                  <option value="feature">Feature</option>
+                </select>
+              </div>
+              
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="submit"
+                  className="btn-primary flex-1"
+                  disabled={loading}
+                >
+                  {loading ? 'Updating...' : 'Update Node'}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelEditNode}
+                  className="btn-secondary flex-1"
+                  disabled={loading}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Layer Modal */}
+      {showEditLayer && editingLayer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-vibe-darker p-6 rounded-lg border border-vibe-gray-dark w-full max-w-md">
+            <h3 className="text-lg font-medium text-vibe-gray mb-4">Edit Layer</h3>
+            
+            <form onSubmit={handleUpdateLayer} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-vibe-gray mb-2">Layer Name</label>
+                <input
+                  type="text"
+                  value={editLayerForm.name}
+                  onChange={(e) => setEditLayerForm({...editLayerForm, name: e.target.value})}
+                  className="input-primary w-full"
+                  placeholder="e.g., Business Logic, Data Layer"
+                  required
+                />
+                <p className="text-xs text-vibe-gray opacity-60 mt-1">
+                  Changing the layer name will update all nodes in this layer
+                </p>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-vibe-gray mb-2">Description (Optional)</label>
+                <textarea
+                  value={editLayerForm.description}
+                  onChange={(e) => setEditLayerForm({...editLayerForm, description: e.target.value})}
+                  className="input-primary w-full h-20 resize-none"
+                  placeholder="Describe the purpose of this layer..."
+                />
+              </div>
+              
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="submit"
+                  className="btn-primary flex-1"
+                  disabled={loading}
+                >
+                  {loading ? 'Updating...' : 'Update Layer'}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelEditLayer}
+                  className="btn-secondary flex-1"
+                  disabled={loading}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

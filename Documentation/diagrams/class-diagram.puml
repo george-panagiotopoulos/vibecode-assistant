@@ -1,0 +1,252 @@
+@startuml class-diagram
+!theme vibedark
+title "Vibe Assistant - System Class Diagram"
+
+' Color scheme matching Vibe Assistant
+skinparam backgroundColor #1e1e1e
+skinparam classBackgroundColor #252526
+skinparam classBorderColor #3c3c3c
+skinparam classArrowColor #007acc
+skinparam noteBackgroundColor #252526
+skinparam noteBorderColor #3c3c3c
+skinparam defaultFontSize 10
+
+' Frontend Components
+package "Frontend (React)" {
+    class App <<Component>> {
+        +state: AppState
+        +render(): JSX.Element
+        +handleNavigation()
+        +handleError()
+    }
+    
+    class PromptBuilder <<Component>> {
+        +prompts: Prompt[]
+        +currentPrompt: Prompt
+        +buildPrompt()
+        +savePrompt()
+        +loadTemplate()
+    }
+    
+    class GitHubIntegration <<Component>> {
+        +repositories: Repository[]
+        +selectedRepo: Repository
+        +connectRepository()
+        +analyzeCode()
+        +fetchFiles()
+    }
+    
+    class ConfigPanel <<Component>> {
+        +config: Configuration
+        +updateConfig()
+        +validateSettings()
+        +exportConfig()
+    }
+    
+    class ApiService <<Service>> {
+        +baseURL: string
+        +get(endpoint: string)
+        +post(endpoint: string, data: any)
+        +handleResponse()
+        +handleError()
+    }
+}
+
+' Backend Services
+package "Backend (Flask)" {
+    class FlaskApp <<Controller>> {
+        +app: Flask
+        +services: ServiceContainer
+        +initialize_routes()
+        +handle_request()
+        +handle_error()
+    }
+    
+    class BedrockService <<Service>> {
+        +client: BedrockClient
+        +model_id: string
+        +invoke_claude(prompt: string): string
+        +invoke_claude_streaming(): Generator
+        +test_connection(): bool
+        -_initialize_client()
+    }
+    
+    class GitHubService <<Service>> {
+        +client: GitHubClient
+        +token: string
+        +get_repository(url: string): Repository
+        +analyze_repository(): Analysis
+        +get_file_content(): string
+        +list_files(): FileList
+    }
+    
+    class Neo4jService <<Service>> {
+        +driver: Neo4jDriver
+        +session: Session
+        +create_node(): Node
+        +create_relationship(): Relationship
+        +query(cypher: string): Result
+        +close_connection()
+    }
+    
+    class PromptService <<Service>> {
+        +templates: PromptTemplate[]
+        +create_prompt(): Prompt
+        +save_prompt(): bool
+        +load_prompt(): Prompt
+        +validate_prompt(): bool
+    }
+    
+    class PromptConstructor <<Service>> {
+        +build_context_prompt(): string
+        +build_code_analysis_prompt(): string
+        +build_documentation_prompt(): string
+        +optimize_prompt(): string
+    }
+    
+    class ConfigService <<Service>> {
+        +config: Configuration
+        +load_config(): Configuration
+        +save_config(): bool
+        +validate_config(): bool
+        +get_setting(key: string): any
+    }
+    
+    class LoggingService <<Service>> {
+        +logger: Logger
+        +log_info(message: string)
+        +log_error(error: Error)
+        +log_debug(data: any)
+        +configure_logging()
+    }
+}
+
+' Data Models
+package "Data Models" {
+    class Prompt {
+        +id: string
+        +title: string
+        +content: string
+        +template_id: string
+        +created_at: DateTime
+        +updated_at: DateTime
+        +validate(): bool
+    }
+    
+    class PromptTemplate {
+        +id: string
+        +name: string
+        +description: string
+        +template: string
+        +variables: Variable[]
+        +category: string
+    }
+    
+    class Repository {
+        +url: string
+        +name: string
+        +owner: string
+        +branch: string
+        +files: File[]
+        +structure: DirectoryTree
+    }
+    
+    class Configuration {
+        +aws_credentials: AWSCredentials
+        +github_token: string
+        +neo4j_config: Neo4jConfig
+        +user_preferences: UserPreferences
+        +validate(): bool
+    }
+    
+    class Analysis {
+        +repository_id: string
+        +file_count: number
+        +language_stats: LanguageStats
+        +complexity_score: number
+        +suggestions: Suggestion[]
+    }
+}
+
+' External Services
+package "External Services" {
+    class AWSBedrock <<External>> {
+        +invoke_model()
+        +list_models()
+    }
+    
+    class GitHubAPI <<External>> {
+        +get_repository()
+        +get_contents()
+        +authenticate()
+    }
+    
+    class Neo4jDatabase <<External>> {
+        +execute_query()
+        +create_session()
+        +close_connection()
+    }
+}
+
+' Relationships - Frontend
+App ||--o{ PromptBuilder : contains
+App ||--o{ GitHubIntegration : contains
+App ||--o{ ConfigPanel : contains
+PromptBuilder --> ApiService : uses
+GitHubIntegration --> ApiService : uses
+ConfigPanel --> ApiService : uses
+
+' Relationships - Backend Services
+FlaskApp ||--o{ BedrockService : manages
+FlaskApp ||--o{ GitHubService : manages
+FlaskApp ||--o{ Neo4jService : manages
+FlaskApp ||--o{ PromptService : manages
+FlaskApp ||--o{ ConfigService : manages
+FlaskApp ||--o{ LoggingService : manages
+
+PromptService --> PromptConstructor : uses
+PromptService --> Neo4jService : stores_in
+GitHubService --> Neo4jService : stores_analysis
+BedrockService --> PromptConstructor : uses_prompts
+
+' Relationships - External Services
+BedrockService --> AWSBedrock : communicates_with
+GitHubService --> GitHubAPI : communicates_with
+Neo4jService --> Neo4jDatabase : communicates_with
+
+' Relationships - Data Models
+PromptService --> Prompt : manages
+PromptService --> PromptTemplate : uses
+GitHubService --> Repository : analyzes
+GitHubService --> Analysis : creates
+ConfigService --> Configuration : manages
+
+' Frontend to Backend Communication
+ApiService --> FlaskApp : HTTP_requests
+
+' Notes
+note top of BedrockService
+    Handles AI model interactions
+    Supports streaming responses
+    Manages AWS credentials
+end note
+
+note top of Neo4jService
+    Stores code relationships
+    Manages graph queries
+    Handles complex data structures
+end note
+
+note top of PromptConstructor
+    Builds context-aware prompts
+    Optimizes for AI models
+    Handles template processing
+end note
+
+note bottom of ApiService
+    Frontend service for backend communication
+    Handles authentication and error management
+    Provides consistent API interface
+end note
+
+@enduml 

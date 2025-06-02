@@ -767,4 +767,148 @@ class Neo4jService:
                 
         except Exception as e:
             logger.error(f"❌ Error creating custom layer {layer_name}: {e}")
+            raise
+
+    def update_node(self, node_id: str, node_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update an existing node in the graph"""
+        if not self.driver:
+            raise Exception("Neo4j connection not available")
+        
+        try:
+            with self.driver.session() as session:
+                # First check if the node exists
+                check_query = """
+                MATCH (n:Node {id: $node_id})
+                RETURN n
+                """
+                
+                result = session.run(check_query, {'node_id': node_id})
+                if not result.single():
+                    raise Exception(f"Node with id '{node_id}' not found")
+                
+                # Update the node
+                query = """
+                MATCH (n:Node {id: $node_id})
+                SET n.name = $name,
+                    n.description = $description,
+                    n.layer = $layer,
+                    n.type = $type,
+                    n.updated_at = datetime()
+                RETURN n
+                """
+                
+                result = session.run(query, {
+                    'node_id': node_id,
+                    'name': node_data['name'],
+                    'description': node_data.get('description', ''),
+                    'layer': node_data.get('layer', ''),
+                    'type': node_data.get('type', '')
+                })
+                
+                record = result.single()
+                if record:
+                    node = record['n']
+                    updated_node = {
+                        'id': node['id'],
+                        'name': node['name'],
+                        'description': node['description'],
+                        'layer': node['layer'],
+                        'type': node['type']
+                    }
+                    
+                    logger.info(f"Updated node: {node_id}")
+                    return updated_node
+                
+                raise Exception("Failed to update node")
+                
+        except Exception as e:
+            logger.error(f"Error updating node: {e}")
+            raise
+
+    def update_custom_layer(self, old_layer_name: str, new_layer_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update a custom layer and optionally rename all nodes in that layer"""
+        if not self.driver:
+            raise Exception("Neo4j connection not available")
+        
+        try:
+            with self.driver.session() as session:
+                new_layer_name = new_layer_data.get('name', old_layer_name)
+                new_description = new_layer_data.get('description', '')
+                
+                # Check if the custom layer exists
+                check_query = """
+                MATCH (l:CustomLayer {name: $old_name})
+                RETURN l
+                """
+                
+                result = session.run(check_query, {'old_name': old_layer_name})
+                custom_layer_exists = result.single() is not None
+                
+                # If renaming to a different name, check if new name already exists
+                if new_layer_name != old_layer_name:
+                    existing_layers = self.get_all_layers()
+                    if new_layer_name in existing_layers:
+                        raise Exception(f"Layer '{new_layer_name}' already exists")
+                
+                # Update or create the custom layer
+                if custom_layer_exists:
+                    update_layer_query = """
+                    MATCH (l:CustomLayer {name: $old_name})
+                    SET l.name = $new_name,
+                        l.description = $description,
+                        l.updated_at = datetime()
+                    RETURN l
+                    """
+                    
+                    session.run(update_layer_query, {
+                        'old_name': old_layer_name,
+                        'new_name': new_layer_name,
+                        'description': new_description
+                    })
+                else:
+                    # Create new custom layer if it doesn't exist
+                    create_layer_query = """
+                    CREATE (l:CustomLayer {
+                        name: $new_name,
+                        description: $description,
+                        created_at: datetime(),
+                        updated_at: datetime()
+                    })
+                    RETURN l
+                    """
+                    
+                    session.run(create_layer_query, {
+                        'new_name': new_layer_name,
+                        'description': new_description
+                    })
+                
+                # If layer name changed, update all nodes in that layer
+                if new_layer_name != old_layer_name:
+                    update_nodes_query = """
+                    MATCH (n:Node {layer: $old_name})
+                    SET n.layer = $new_name,
+                        n.updated_at = datetime()
+                    RETURN count(n) as updated_count
+                    """
+                    
+                    result = session.run(update_nodes_query, {
+                        'old_name': old_layer_name,
+                        'new_name': new_layer_name
+                    })
+                    
+                    record = result.single()
+                    updated_count = record['updated_count'] if record else 0
+                    
+                    logger.info(f"Updated {updated_count} nodes from layer '{old_layer_name}' to '{new_layer_name}'")
+                
+                logger.info(f"Updated custom layer: '{old_layer_name}' -> '{new_layer_name}'")
+                
+                return {
+                    'name': new_layer_name,
+                    'description': new_description,
+                    'old_name': old_layer_name
+                }
+                
+        except Exception as e:
+            logger.error(f"Error updating custom layer: {e}")
             raise 

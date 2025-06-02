@@ -953,6 +953,44 @@ def delete_saved_graph(graph_name):
         logger.error(f"Error deleting saved graph: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/api/graph/nodes/<node_id>', methods=['PUT'])
+def update_graph_node(node_id):
+    """Update a specific node"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        node_data = request.json
+        
+        # Validate required fields
+        if not node_data or 'name' not in node_data:
+            return jsonify({"success": False, "error": "Node name is required"}), 400
+        
+        updated_node = neo4j_service.update_node(node_id, node_data)
+        return jsonify({"success": True, "node": updated_node})
+    except Exception as e:
+        logger.error(f"Error updating graph node: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/layers/<layer_name>', methods=['PUT'])
+def update_graph_layer(layer_name):
+    """Update a specific layer"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        layer_data = request.json
+        
+        # Validate required fields
+        if not layer_data or 'name' not in layer_data:
+            return jsonify({"success": False, "error": "Layer name is required"}), 400
+        
+        updated_layer = neo4j_service.update_custom_layer(layer_name, layer_data)
+        return jsonify({"success": True, "layer": updated_layer})
+    except Exception as e:
+        logger.error(f"Error updating graph layer: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({"success": False, "error": "Endpoint not found"}), 404

@@ -1,0 +1,186 @@
+@startuml prompt-generation
+!theme vibedark
+title "Prompt Generation Flow"
+
+' Color scheme matching Vibe Assistant
+skinparam backgroundColor #1e1e1e
+skinparam participantBackgroundColor #252526
+skinparam participantBorderColor #3c3c3c
+skinparam sequenceArrowColor #007acc
+skinparam noteBackgroundColor #252526
+skinparam noteBorderColor #3c3c3c
+
+actor User as user
+participant "PromptBuilder\n<<Component>>" as frontend
+participant "ApiService\n<<Service>>" as api
+participant "Flask App\n<<Controller>>" as flask
+participant "PromptService\n<<Service>>" as prompt_service
+participant "PromptConstructor\n<<Service>>" as constructor
+participant "BedrockService\n<<Service>>" as bedrock
+participant "Neo4jService\n<<Service>>" as neo4j
+participant "AWS Bedrock\n<<External>>" as aws
+
+== Prompt Creation ==
+
+user -> frontend: Create new prompt
+activate frontend
+
+frontend -> frontend: Initialize prompt builder
+frontend -> api: GET /api/prompts/templates
+activate api
+
+api -> flask: GET /api/prompts/templates
+activate flask
+
+flask -> prompt_service: get_templates()
+activate prompt_service
+
+prompt_service -> neo4j: query("MATCH (t:Template) RETURN t")
+activate neo4j
+neo4j --> prompt_service: template_list
+deactivate neo4j
+
+prompt_service --> flask: templates
+deactivate prompt_service
+
+flask --> api: JSON response
+deactivate flask
+
+api --> frontend: template_data
+deactivate api
+
+frontend --> user: Display template options
+deactivate frontend
+
+== Template Selection & Customization ==
+
+user -> frontend: Select template & add context
+activate frontend
+
+frontend -> frontend: Build prompt with user input
+frontend -> api: POST /api/prompts/validate
+activate api
+
+api -> flask: POST /api/prompts/validate
+activate flask
+
+flask -> prompt_service: validate_prompt(prompt_data)
+activate prompt_service
+
+prompt_service -> constructor: build_context_prompt(context)
+activate constructor
+
+constructor -> constructor: Process template variables
+constructor -> constructor: Add context information
+constructor --> prompt_service: structured_prompt
+deactivate constructor
+
+prompt_service --> flask: validation_result
+deactivate prompt_service
+
+flask --> api: JSON response
+deactivate flask
+
+api --> frontend: validation_status
+deactivate api
+
+frontend --> user: Show validation feedback
+deactivate frontend
+
+== AI Generation ==
+
+user -> frontend: Generate AI response
+activate frontend
+
+frontend -> api: POST /api/bedrock/generate
+activate api
+note right of api
+    Request includes:
+    - prompt text
+    - system context
+    - generation parameters
+end note
+
+api -> flask: POST /api/bedrock/generate
+activate flask
+
+flask -> bedrock: invoke_claude_streaming(prompt, system_prompt)
+activate bedrock
+
+bedrock -> constructor: optimize_prompt(prompt)
+activate constructor
+constructor --> bedrock: optimized_prompt
+deactivate constructor
+
+bedrock -> aws: invoke_model_with_response_stream()
+activate aws
+
+note right of aws
+    Streaming response allows
+    real-time text generation
+    display to user
+end note
+
+aws --> bedrock: streaming_response
+bedrock --> flask: yield response_chunks
+deactivate aws
+
+flask --> api: SSE stream
+deactivate flask
+
+api --> frontend: streaming_data
+deactivate api
+
+frontend -> frontend: Update UI with streaming text
+frontend --> user: Display real-time response
+deactivate frontend
+
+== Save Generated Content ==
+
+user -> frontend: Save prompt & response
+activate frontend
+
+frontend -> api: POST /api/prompts/save
+activate api
+
+api -> flask: POST /api/prompts/save
+activate flask
+
+flask -> prompt_service: save_prompt(prompt_data)
+activate prompt_service
+
+prompt_service -> neo4j: CREATE (p:Prompt {properties})
+activate neo4j
+neo4j --> prompt_service: saved_prompt_id
+deactivate neo4j
+
+prompt_service -> neo4j: CREATE relationship to template
+activate neo4j
+neo4j --> prompt_service: relationship_created
+deactivate neo4j
+
+prompt_service --> flask: save_result
+deactivate prompt_service
+
+flask --> api: JSON response
+deactivate flask
+
+api --> frontend: save_confirmation
+deactivate api
+
+frontend --> user: Show save success
+deactivate frontend
+
+deactivate bedrock
+
+== Error Handling ==
+
+note over frontend, aws
+    Error scenarios handled at each level:
+    - Frontend: Input validation, network errors
+    - API: Request validation, service errors
+    - Services: External service failures, data errors
+    - Each component logs errors and provides user feedback
+end note
+
+@enduml 
