@@ -68,7 +68,7 @@ const RepositoryLoader = ({ onRepositoryLoad, config }) => {
         <div className="flex items-center justify-between">
           <label className="text-small font-medium">GitHub Token</label>
           <button
-            className="btn-secondary btn-small"
+            className="btn-standard btn-small"
             onClick={() => setShowTokenInput(!showTokenInput)}
             type="button"
           >
@@ -100,7 +100,7 @@ const RepositoryLoader = ({ onRepositoryLoad, config }) => {
       </div>
 
       <button
-        className="btn"
+        className="btn-add"
         onClick={handleLoad}
         disabled={loading || !repoUrl.trim()}
       >

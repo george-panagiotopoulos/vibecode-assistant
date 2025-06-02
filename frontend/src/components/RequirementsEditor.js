@@ -485,7 +485,7 @@ const RequirementsEditor = () => {
   // Get type badge color
   const getTypeColor = (type) => {
     const colors = {
-      'NFR': 'bg-vibe-blue',
+      'Non-Functional Requirement': 'bg-vibe-blue',
       'Standard': 'bg-vibe-green',
       'Requirement': 'bg-yellow-500',
       'Constraint': 'bg-vibe-red'
@@ -699,32 +699,32 @@ const RequirementsEditor = () => {
         <div className="flex flex-wrap gap-3">
           <button
             onClick={() => setShowAddLayer(true)}
-            className="btn-accent"
+            className="btn-add"
           >
             📚 Add Layer
           </button>
           <button
             onClick={() => setShowAddNode(true)}
-            className="btn-primary"
+            className="btn-add"
           >
             ➕ Add Node
           </button>
           <button
             onClick={() => setShowAddEdge(true)}
-            className="btn-secondary"
+            className="btn-add"
           >
             🔗 Add Edge
           </button>
           <button
             onClick={() => setShowGraphVisualization(true)}
-            className="btn-primary"
+            className="btn-standard"
           >
             🌐 Visualize Graph
           </button>
           <button
             onClick={() => setShowSaveGraph(true)}
             disabled={loading || nodes.length === 0}
-            className="btn-accent"
+            className="btn-standard"
             title={nodes.length === 0 ? "No graph data to save" : "Save current graph"}
           >
             💾 Save Graph
@@ -732,27 +732,27 @@ const RequirementsEditor = () => {
           <button
             onClick={openLoadGraphModal}
             disabled={loading}
-            className="btn-secondary"
+            className="btn-standard"
           >
             📂 Load Graph
           </button>
           <button
             onClick={handleLoadSampleData}
             disabled={loading}
-            className="btn-accent"
+            className="btn-add"
           >
             📊 Load Sample Data
           </button>
           <button
             onClick={fetchGraphData}
             disabled={loading}
-            className="btn-secondary"
+            className="btn-standard"
           >
             🔄 Refresh
           </button>
           <button
             onClick={handleClearAll}
-            className="btn-danger"
+            className="btn-delete"
           >
             🗑️ Clear All
           </button>
@@ -784,7 +784,7 @@ const RequirementsEditor = () => {
                     </div>
                     <button
                       onClick={() => setShowAddLayer(true)}
-                      className="btn-primary mt-4"
+                      className="btn-add mt-4"
                     >
                       Create First Layer
                     </button>
@@ -808,7 +808,7 @@ const RequirementsEditor = () => {
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => handleEditLayer(layer)}
-                                className="text-vibe-blue hover:text-blue-400 text-sm px-2 py-1 rounded hover:bg-vibe-blue hover:bg-opacity-20 transition-colors"
+                                className="text-orange-500 hover:text-orange-400 text-sm px-2 py-1 rounded hover:bg-orange-500 hover:bg-opacity-20 transition-colors"
                                 title={`Edit ${layer} layer`}
                               >
                                 ✏️ Edit Layer
@@ -848,7 +848,7 @@ const RequirementsEditor = () => {
                                     <div className="flex flex-col gap-1 ml-2">
                                       <button
                                         onClick={() => handleEditNode(node)}
-                                        className="text-vibe-blue hover:text-blue-400 text-sm opacity-60 hover:opacity-100"
+                                        className="text-orange-500 hover:text-orange-400 text-sm opacity-60 hover:opacity-100"
                                         title="Edit node"
                                       >
                                         ✏️
@@ -975,14 +975,14 @@ const RequirementsEditor = () => {
                 <div className="flex gap-3 pt-4">
                   <button
                     type="submit"
-                    className="btn-primary flex-1"
+                    className="btn-add flex-1"
                   >
                     Add Layer
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowAddLayer(false)}
-                    className="btn-secondary flex-1"
+                    className="btn-standard flex-1"
                   >
                     Cancel
                   </button>
@@ -1069,14 +1069,14 @@ const RequirementsEditor = () => {
                 <div className="flex gap-3 pt-4">
                   <button
                     type="submit"
-                    className="btn-primary flex-1"
+                    className="btn-add flex-1"
                   >
                     Add Node
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowAddNode(false)}
-                    className="btn-secondary flex-1"
+                    className="btn-standard flex-1"
                   >
                     Cancel
                   </button>
@@ -1141,13 +1141,13 @@ const RequirementsEditor = () => {
                 </div>
                 
                 <div className="flex gap-3 pt-4">
-                  <button type="submit" className="btn-primary flex-1">
+                  <button type="submit" className="btn-add flex-1">
                     Create Relationship
                   </button>
                   <button 
                     type="button" 
                     onClick={() => setShowAddEdge(false)}
-                    className="btn-secondary flex-1"
+                    className="btn-standard flex-1"
                   >
                     Cancel
                   </button>
@@ -1319,7 +1319,7 @@ const RequirementsEditor = () => {
                 </button>
                 <button
                   type="submit"
-                  className="btn-accent"
+                  className="btn-standard"
                 >
                   💾 Save Graph
                 </button>
@@ -1481,7 +1481,7 @@ const RequirementsEditor = () => {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="btn-primary flex-1"
+                  className="btn-edit flex-1"
                   disabled={loading}
                 >
                   {loading ? 'Updating...' : 'Update Node'}
@@ -1489,7 +1489,7 @@ const RequirementsEditor = () => {
                 <button
                   type="button"
                   onClick={cancelEditNode}
-                  className="btn-secondary flex-1"
+                  className="btn-standard flex-1"
                   disabled={loading}
                 >
                   Cancel
@@ -1535,7 +1535,7 @@ const RequirementsEditor = () => {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="btn-primary flex-1"
+                  className="btn-edit flex-1"
                   disabled={loading}
                 >
                   {loading ? 'Updating...' : 'Update Layer'}
@@ -1543,7 +1543,7 @@ const RequirementsEditor = () => {
                 <button
                   type="button"
                   onClick={cancelEditLayer}
-                  className="btn-secondary flex-1"
+                  className="btn-standard flex-1"
                   disabled={loading}
                 >
                   Cancel

@@ -174,7 +174,7 @@ const FileExplorer = ({ repositoryPath, selectedFiles, onFileSelect, onFileDesel
           <div className="text-red-400 mb-4">{error}</div>
           <button
             onClick={loadFiles}
-            className="btn-secondary"
+            className="btn-standard"
           >
             🔄 Retry
           </button>
@@ -194,14 +194,14 @@ const FileExplorer = ({ repositoryPath, selectedFiles, onFileSelect, onFileDesel
           <div className="flex space-x-2">
             <button
               onClick={selectAll}
-              className="text-xs btn-secondary"
+              className="text-xs btn-add"
               title="Select all files"
             >
               ✅ All
             </button>
             <button
               onClick={clearSelection}
-              className="text-xs btn-secondary"
+              className="text-xs btn-delete"
               title="Clear selection"
             >
               🗑️ Clear

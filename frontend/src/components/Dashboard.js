@@ -365,7 +365,7 @@ const Dashboard = ({ config, onConfigUpdate }) => {
               <button
                 onClick={checkAllServices}
                 disabled={loading}
-                className="btn-secondary mb-2"
+                className="btn-standard mb-2"
               >
                 {loading ? '🔄 Checking...' : '🔄 Refresh Status'}
               </button>
@@ -535,27 +535,27 @@ const Dashboard = ({ config, onConfigUpdate }) => {
               <div className="flex flex-wrap gap-3">
                 <button
                   onClick={() => window.open('http://localhost:7474', '_blank')}
-                  className="btn-secondary"
+                  className="btn-standard"
                 >
                   🗄️ Open Neo4j Browser
                 </button>
                 <button
                   onClick={() => window.open('/api/health', '_blank')}
-                  className="btn-secondary"
+                  className="btn-standard"
                 >
                   🔧 View API Health
                 </button>
                 <button
                   onClick={checkAllServices}
                   disabled={loading}
-                  className="btn-primary"
+                  className="btn-standard"
                 >
                   🔄 Refresh All Services
                 </button>
                 <button
                   onClick={loadConfig}
                   disabled={configLoading}
-                  className="btn-secondary"
+                  className="btn-standard"
                 >
                   📥 Reload Configuration
                 </button>
@@ -579,14 +579,14 @@ const Dashboard = ({ config, onConfigUpdate }) => {
                 <button
                   onClick={loadConfig}
                   disabled={configLoading}
-                  className="btn-secondary"
+                  className="btn-standard"
                 >
                   {configLoading ? '⏳ Loading...' : '📥 Load Config'}
                 </button>
                 <button
                   onClick={saveConfig}
                   disabled={configLoading}
-                  className="btn-primary"
+                  className="btn-standard"
                 >
                   {configLoading ? '⏳ Saving...' : '💾 Save Config'}
                 </button>
@@ -623,7 +623,7 @@ const Dashboard = ({ config, onConfigUpdate }) => {
                 <button
                   onClick={testAWSConnection}
                   disabled={configLoading || testing.aws || !configData.aws?.access_key_id}
-                  className={`btn-secondary text-sm ${getTestStatusColor(testing.aws ? 'testing' : testResults.aws)}`}
+                  className={`btn-standard text-sm ${getTestStatusColor(testing.aws ? 'testing' : testResults.aws)}`}
                 >
                   {getTestStatusIcon(testing.aws ? 'testing' : testResults.aws)} Test Connection
                 </button>
@@ -699,7 +699,7 @@ const Dashboard = ({ config, onConfigUpdate }) => {
                 <button
                   onClick={testGitHubConnection}
                   disabled={configLoading || testing.github || !configData.github?.token}
-                  className={`btn-secondary text-sm ${getTestStatusColor(testing.github ? 'testing' : testResults.github)}`}
+                  className={`btn-standard text-sm ${getTestStatusColor(testing.github ? 'testing' : testResults.github)}`}
                 >
                   {getTestStatusIcon(testing.github ? 'testing' : testResults.github)} Test Connection
                 </button>
@@ -749,7 +749,7 @@ const Dashboard = ({ config, onConfigUpdate }) => {
                 <button
                   onClick={testNeo4jConnection}
                   disabled={configLoading || testing.neo4j || !configData.neo4j?.uri}
-                  className={`btn-secondary text-sm ${getTestStatusColor(testing.neo4j ? 'testing' : testResults.neo4j)}`}
+                  className={`btn-standard text-sm ${getTestStatusColor(testing.neo4j ? 'testing' : testResults.neo4j)}`}
                 >
                   {getTestStatusIcon(testing.neo4j ? 'testing' : testResults.neo4j)} Test Connection
                 </button>

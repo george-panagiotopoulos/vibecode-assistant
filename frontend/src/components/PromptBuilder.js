@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import loggingService from '../services/LoggingService';
 import ApiService from '../services/ApiService';
-import NFRLoader from './NFRLoader';
+import NonFunctionalRequirementsLoader from './NonFunctionalRequirementsLoader';
 
 const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
   const [prompt, setPrompt] = useState('');
@@ -50,7 +50,7 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
       const systemPrompt = getSystemPrompt(enhancementType);
       const maxTokens = enhancementType === 'plan' ? 1000 : 4000; // Limit tokens for plan to ensure 500 words or less
       
-      // Build the enhanced prompt with NFRs if selected
+      // Build the enhanced prompt with Non-Functional Requirements if selected
       let enhancedPrompt = prompt;
       if (selectedNFRs.length > 0) {
         const nfrSection = '\n\nNon-Functional Requirements:\n' + 
@@ -139,7 +139,7 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
 
   const handleNFRSelection = (nodes) => {
     setSelectedNFRs(nodes);
-    loggingService.logInfo('NFR nodes selected for prompt', {
+    loggingService.logInfo('Non-Functional Requirements nodes selected for prompt', {
       nodeCount: nodes.length,
       nodeNames: nodes.map(n => n.name)
     });
@@ -159,13 +159,13 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-vibe-gray mb-2">
-              NFR Requirements
+              Non-Functional Requirements
             </label>
             <button
               onClick={() => setNfrLoaderOpen(true)}
-              className="btn-primary w-full"
+              className="btn-add w-full"
             >
-              📋 Load NFR ({selectedNFRs.length})
+              📋 Load Non-Functional Requirements ({selectedNFRs.length})
             </button>
           </div>
 
@@ -207,11 +207,11 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
           </div>
         </div>
 
-        {/* Selected NFRs Display */}
+        {/* Selected Non-Functional Requirements Display */}
         {selectedNFRs.length > 0 && (
           <div className="mb-4">
             <label className="block text-sm font-medium text-vibe-gray mb-2">
-              Selected NFR Requirements ({selectedNFRs.length})
+              Selected Non-Functional Requirements ({selectedNFRs.length})
             </label>
             <div className="panel p-3 max-h-32 overflow-y-auto">
               <div className="space-y-2">
@@ -224,7 +224,7 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
                     <button
                       onClick={() => removeNFR(nfr.id)}
                       className="text-vibe-red hover:text-red-400 ml-2"
-                      title="Remove NFR"
+                      title="Remove Non-Functional Requirement"
                     >
                       ✕
                     </button>
@@ -263,7 +263,7 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
             <button
               onClick={() => enhancePrompt('full_specification')}
               disabled={!prompt.trim() || isEnhancing}
-              className="btn-primary disabled:opacity-50"
+              className="btn-standard disabled:opacity-50"
               title="Generate a comprehensive business requirements specification"
             >
               {isEnhancing && currentEnhancementType === 'full_specification' ? 
@@ -274,7 +274,7 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
             <button
               onClick={() => enhancePrompt('plan')}
               disabled={!prompt.trim() || isEnhancing}
-              className="btn-primary disabled:opacity-50"
+              className="btn-standard disabled:opacity-50"
               title="Generate a step-by-step implementation plan (500 words or less)"
             >
               {isEnhancing && currentEnhancementType === 'plan' ? 
@@ -285,7 +285,7 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
             <button
               onClick={() => enhancePrompt('clarity')}
               disabled={!prompt.trim() || isEnhancing}
-              className="btn-primary disabled:opacity-50"
+              className="btn-standard disabled:opacity-50"
               title="Improve the clarity and language of your prompt"
             >
               {isEnhancing && currentEnhancementType === 'clarity' ? 
@@ -300,7 +300,7 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
                 setEnhancementMetadata(null);
                 setCurrentEnhancementType('');
               }}
-              className="btn-secondary"
+              className="btn-delete"
             >
               🗑️ Clear
             </button>
@@ -309,7 +309,7 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
           {enhancedSpecification && (
             <button
               onClick={copyToClipboard}
-              className="btn-secondary"
+              className="btn-standard"
             >
               📋 Copy Result
             </button>
@@ -326,7 +326,7 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
               <div className="text-xs text-vibe-gray opacity-60 flex items-center space-x-4">
                 {enhancementMetadata && (
                   <>
-                    <span>NFRs: {enhancementMetadata.nfr_count || 0}</span>
+                    <span>Non-Functional Requirements: {enhancementMetadata.nfr_count || 0}</span>
                     <span>Files: {enhancementMetadata.file_count || 0}</span>
                     <span>Model: {enhancementMetadata.model_used || 'Claude'}</span>
                   </>
@@ -345,8 +345,8 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
         )}
       </div>
 
-      {/* NFR Loader Modal */}
-      <NFRLoader
+      {/* Non-Functional Requirements Loader Modal */}
+      <NonFunctionalRequirementsLoader
         isOpen={nfrLoaderOpen}
         onClose={() => setNfrLoaderOpen(false)}
         onNodesSelected={handleNFRSelection}

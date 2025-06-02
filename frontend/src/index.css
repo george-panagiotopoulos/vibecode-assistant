@@ -55,8 +55,25 @@ code {
 }
 
 /* Custom button styles */
+.btn-standard {
+  @apply bg-vibe-blue hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors duration-200;
+}
+
+.btn-add {
+  @apply bg-vibe-green hover:bg-green-600 text-white px-4 py-2 rounded transition-colors duration-200;
+}
+
+.btn-delete {
+  @apply bg-vibe-red hover:bg-red-600 text-white px-4 py-2 rounded transition-colors duration-200;
+}
+
+.btn-edit {
+  @apply bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded transition-colors duration-200;
+}
+
+/* Legacy button styles - keeping for backward compatibility during transition */
 .btn-primary {
-  @apply bg-vibe-blue hover:bg-vibe-blue-hover text-white px-4 py-2 rounded transition-colors duration-200;
+  @apply bg-vibe-blue hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors duration-200;
 }
 
 .btn-secondary {

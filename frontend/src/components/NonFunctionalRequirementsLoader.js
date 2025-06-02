@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ApiService from '../services/ApiService';
 import loggingService from '../services/LoggingService';
 
-const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
+const NonFunctionalRequirementsLoader = ({ isOpen, onClose, onNodesSelected }) => {
   const [step, setStep] = useState('graphs'); // 'graphs' or 'nodes'
   const [savedGraphs, setSavedGraphs] = useState([]);
   const [selectedGraph, setSelectedGraph] = useState(null);
@@ -10,6 +10,7 @@ const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
   const [layerData, setLayerData] = useState({});
   const [expandedLayers, setExpandedLayers] = useState(new Set());
   const [selectedNodes, setSelectedNodes] = useState(new Set());
+  const [includeAdjacent, setIncludeAdjacent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -26,7 +27,7 @@ const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
     try {
       const response = await ApiService.getSavedGraphs();
       setSavedGraphs(response.graphs || []);
-      loggingService.logInfo('Loaded saved graphs for NFR selection', {
+      loggingService.logInfo('Loaded saved graphs for Non-Functional Requirements selection', {
         count: response.graphs?.length || 0
       });
     } catch (error) {
@@ -59,7 +60,7 @@ const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
       setLayerData(layers);
       setStep('nodes');
       
-      loggingService.logInfo('Loaded graph data for NFR selection', {
+      loggingService.logInfo('Loaded graph data for Non-Functional Requirements selection', {
         graphName,
         nodeCount: response.data?.nodes?.length || 0,
         layerCount: Object.keys(layers).length
@@ -82,6 +83,31 @@ const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
     setExpandedLayers(newExpanded);
   };
 
+  // NEW: Bulk import entire layer
+  const importEntireLayer = (layerName) => {
+    const layerNodes = layerData[layerName] || [];
+    const newSelected = new Set(selectedNodes);
+    
+    // Check if all nodes in layer are already selected
+    const allSelected = layerNodes.every(node => newSelected.has(node.id));
+    
+    if (allSelected) {
+      // Deselect all nodes in layer
+      layerNodes.forEach(node => newSelected.delete(node.id));
+    } else {
+      // Select all nodes in layer
+      layerNodes.forEach(node => newSelected.add(node.id));
+    }
+    
+    setSelectedNodes(newSelected);
+    
+    loggingService.logInfo('Bulk layer import toggled', {
+      layerName,
+      nodeCount: layerNodes.length,
+      action: allSelected ? 'deselected' : 'selected'
+    });
+  };
+
   const toggleNodeSelection = (nodeId) => {
     const newSelected = new Set(selectedNodes);
     if (newSelected.has(nodeId)) {
@@ -92,18 +118,57 @@ const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
     setSelectedNodes(newSelected);
   };
 
+  // NEW: Get adjacent requirements based on graph edges
+  const getAdjacentRequirements = (selectedNodeIds) => {
+    const adjacentNodes = new Set();
+    const edges = graphData.edges || [];
+    
+    selectedNodeIds.forEach(nodeId => {
+      edges.forEach(edge => {
+        // If the selected node is the source, add the target
+        if (edge.from_id === nodeId) {
+          adjacentNodes.add(edge.to_id);
+        }
+        // If the selected node is the target, add the source
+        if (edge.to_id === nodeId) {
+          adjacentNodes.add(edge.from_id);
+        }
+      });
+    });
+    
+    // Remove nodes that are already selected
+    selectedNodeIds.forEach(nodeId => adjacentNodes.delete(nodeId));
+    
+    return Array.from(adjacentNodes);
+  };
+
   const handleAddToPrompt = () => {
+    let finalSelectedNodes = new Set(selectedNodes);
+    
+    // If include adjacent is checked, add adjacent requirements
+    if (includeAdjacent && selectedNodes.size > 0) {
+      const adjacentNodeIds = getAdjacentRequirements(Array.from(selectedNodes));
+      adjacentNodeIds.forEach(nodeId => finalSelectedNodes.add(nodeId));
+      
+      loggingService.logInfo('Added adjacent requirements', {
+        originalCount: selectedNodes.size,
+        adjacentCount: adjacentNodeIds.length,
+        totalCount: finalSelectedNodes.size
+      });
+    }
+    
     const selectedNodeData = graphData.nodes.filter(node => 
-      selectedNodes.has(node.id)
+      finalSelectedNodes.has(node.id)
     );
     
     onNodesSelected(selectedNodeData);
     onClose();
     
-    loggingService.logInfo('Added NFR nodes to prompt', {
+    loggingService.logInfo('Added Non-Functional Requirements nodes to prompt', {
       graphName: selectedGraph,
       nodeCount: selectedNodeData.length,
-      nodeIds: Array.from(selectedNodes)
+      nodeIds: Array.from(finalSelectedNodes),
+      includeAdjacent
     });
   };
 
@@ -114,6 +179,7 @@ const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
     setLayerData({});
     setExpandedLayers(new Set());
     setSelectedNodes(new Set());
+    setIncludeAdjacent(false);
     setError('');
   };
 
@@ -124,8 +190,21 @@ const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
     setLayerData({});
     setExpandedLayers(new Set());
     setSelectedNodes(new Set());
+    setIncludeAdjacent(false);
     setError('');
     onClose();
+  };
+
+  // Helper function to check if all nodes in a layer are selected
+  const isLayerFullySelected = (layerName) => {
+    const layerNodes = layerData[layerName] || [];
+    return layerNodes.length > 0 && layerNodes.every(node => selectedNodes.has(node.id));
+  };
+
+  // Helper function to check if some nodes in a layer are selected
+  const isLayerPartiallySelected = (layerName) => {
+    const layerNodes = layerData[layerName] || [];
+    return layerNodes.some(node => selectedNodes.has(node.id)) && !isLayerFullySelected(layerName);
   };
 
   if (!isOpen) return null;
@@ -139,13 +218,13 @@ const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
             {step === 'nodes' && (
               <button
                 onClick={handleBack}
-                className="btn-secondary text-sm"
+                className="btn-standard text-sm"
               >
                 ← Back
               </button>
             )}
             <h2 className="text-xl font-medium text-vibe-gray">
-              {step === 'graphs' ? 'Load NFR Graph' : `NFR Selection - ${selectedGraph}`}
+              {step === 'graphs' ? 'Load Non-Functional Requirements Graph' : `Non-Functional Requirements Selection - ${selectedGraph}`}
             </h2>
           </div>
           <button
@@ -174,7 +253,7 @@ const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
             <div className="p-6">
               <div className="mb-4">
                 <p className="text-vibe-gray text-sm mb-4">
-                  Select a saved graph to load NFR nodes from:
+                  Select a saved graph to load Non-Functional Requirements nodes from:
                 </p>
               </div>
 
@@ -183,7 +262,7 @@ const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
                   <div className="text-vibe-gray opacity-60 mb-2">📊</div>
                   <p className="text-vibe-gray">No saved graphs available</p>
                   <p className="text-vibe-gray text-sm opacity-60">
-                    Create and save a graph first to use NFR loading
+                    Create and save a graph first to use Non-Functional Requirements loading
                   </p>
                 </div>
               ) : (
@@ -220,9 +299,33 @@ const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
                   <p className="text-vibe-gray text-sm mb-2">
                     Select nodes to add to your prompt requirements:
                   </p>
-                  <div className="text-xs text-vibe-gray opacity-60">
+                  <div className="text-xs text-vibe-gray opacity-60 mb-3">
                     {selectedNodes.size} node(s) selected
                   </div>
+                  
+                  {/* Adjacent Requirements Checkbox */}
+                  {selectedNodes.size > 0 && (
+                    <div className="mb-4 p-3 bg-vibe-dark rounded border border-vibe-gray-dark">
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={includeAdjacent}
+                          onChange={(e) => setIncludeAdjacent(e.target.checked)}
+                          className="text-vibe-blue"
+                        />
+                        <span className="text-sm text-vibe-gray">
+                          Include adjacent requirements
+                        </span>
+                      </label>
+                      <p className="text-xs text-vibe-gray opacity-60 mt-1">
+                        Automatically include requirements that share graph edges with selected nodes
+                        {includeAdjacent && (() => {
+                          const adjacentCount = getAdjacentRequirements(Array.from(selectedNodes)).length;
+                          return adjacentCount > 0 ? ` (+${adjacentCount} additional)` : ' (no additional found)';
+                        })()}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {Object.keys(layerData).length === 0 ? (
@@ -234,22 +337,49 @@ const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
                   <div className="space-y-2">
                     {Object.entries(layerData).map(([layerName, nodes]) => (
                       <div key={layerName} className="border border-vibe-gray-dark rounded-lg">
-                        <button
-                          onClick={() => toggleLayer(layerName)}
-                          className="w-full p-3 text-left flex items-center justify-between hover:bg-vibe-darkest transition-colors"
-                        >
-                          <div className="flex items-center space-x-2">
-                            <span className="text-vibe-gray font-medium">
-                              {expandedLayers.has(layerName) ? '📂' : '📁'} {layerName}
+                        <div className="flex items-center">
+                          <button
+                            onClick={() => toggleLayer(layerName)}
+                            className="flex-1 p-3 text-left flex items-center justify-between hover:bg-vibe-darkest transition-colors"
+                          >
+                            <div className="flex items-center space-x-2">
+                              <span className="text-vibe-gray font-medium">
+                                {expandedLayers.has(layerName) ? '📂' : '📁'} {layerName}
+                              </span>
+                              <span className="text-xs text-vibe-gray opacity-60">
+                                ({nodes.length} node{nodes.length !== 1 ? 's' : ''})
+                              </span>
+                              {isLayerFullySelected(layerName) && (
+                                <span className="text-xs bg-vibe-green text-white px-2 py-1 rounded">
+                                  All Selected
+                                </span>
+                              )}
+                              {isLayerPartiallySelected(layerName) && (
+                                <span className="text-xs bg-vibe-blue text-white px-2 py-1 rounded">
+                                  Partial
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-vibe-gray opacity-60">
+                              {expandedLayers.has(layerName) ? '▼' : '▶'}
                             </span>
-                            <span className="text-xs text-vibe-gray opacity-60">
-                              ({nodes.length} node{nodes.length !== 1 ? 's' : ''})
-                            </span>
+                          </button>
+                          
+                          {/* Bulk Import Button */}
+                          <div className="p-3 border-l border-vibe-gray-dark">
+                            <button
+                              onClick={() => importEntireLayer(layerName)}
+                              className={`text-xs px-3 py-1 rounded transition-colors ${
+                                isLayerFullySelected(layerName)
+                                  ? 'bg-vibe-red text-white hover:bg-red-600'
+                                  : 'bg-vibe-green text-white hover:bg-green-600'
+                              }`}
+                              title={isLayerFullySelected(layerName) ? 'Deselect entire layer' : 'Select entire layer'}
+                            >
+                              {isLayerFullySelected(layerName) ? '✕ Deselect All' : '✓ Select All'}
+                            </button>
                           </div>
-                          <span className="text-vibe-gray opacity-60">
-                            {expandedLayers.has(layerName) ? '▼' : '▶'}
-                          </span>
-                        </button>
+                        </div>
 
                         {expandedLayers.has(layerName) && (
                           <div className="border-t border-vibe-gray-dark">
@@ -296,20 +426,24 @@ const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
               <div className="p-6 border-t border-vibe-gray-dark flex justify-between items-center">
                 <div className="text-sm text-vibe-gray">
                   {selectedNodes.size} node(s) selected
+                  {includeAdjacent && selectedNodes.size > 0 && (() => {
+                    const adjacentCount = getAdjacentRequirements(Array.from(selectedNodes)).length;
+                    return adjacentCount > 0 ? ` (+${adjacentCount} adjacent)` : '';
+                  })()}
                 </div>
                 <div className="flex space-x-2">
                   <button
                     onClick={handleBack}
-                    className="btn-secondary"
+                    className="btn-standard"
                   >
                     Back to Graphs
                   </button>
                   <button
                     onClick={handleAddToPrompt}
                     disabled={selectedNodes.size === 0}
-                    className="btn-primary disabled:opacity-50"
+                    className="btn-add disabled:opacity-50"
                   >
-                    Add to Prompt ({selectedNodes.size})
+                    Add to Prompt ({selectedNodes.size}{includeAdjacent && selectedNodes.size > 0 ? `+${getAdjacentRequirements(Array.from(selectedNodes)).length}` : ''})
                   </button>
                 </div>
               </div>
@@ -321,4 +455,4 @@ const NFRLoader = ({ isOpen, onClose, onNodesSelected }) => {
   );
 };
 
-export default NFRLoader; 
+export default NonFunctionalRequirementsLoader; 
