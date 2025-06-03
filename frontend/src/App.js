@@ -6,6 +6,7 @@ import RequirementsEditor from './components/RequirementsEditor';
 import StatusBar from './components/StatusBar';
 import StreamingTest from './components/StreamingTest';
 import Dashboard from './components/Dashboard';
+import FileViewer from './components/FileViewer';
 
 const App = () => {
   const [currentView, setCurrentView] = useState('prompt');
@@ -15,6 +16,10 @@ const App = () => {
   const [repositoryData, setRepositoryData] = useState(null);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [statusMessage, setStatusMessage] = useState('');
+  
+  // File viewer state
+  const [isFileViewerActive, setIsFileViewerActive] = useState(false);
+  const [viewedFile, setViewedFile] = useState(null);
 
   useEffect(() => {
     loadConfig();
@@ -108,7 +113,30 @@ const App = () => {
     }
   };
 
+  // File viewer functions
+  const handleFileView = (file) => {
+    setViewedFile(file);
+    setIsFileViewerActive(true);
+  };
+
+  const handleFileViewerClose = () => {
+    setIsFileViewerActive(false);
+    setViewedFile(null);
+  };
+
   const renderMainContent = () => {
+    // If file viewer is active, show it instead of the normal content
+    if (isFileViewerActive && viewedFile) {
+      return (
+        <FileViewer
+          file={viewedFile}
+          repositoryData={repositoryData}
+          config={config}
+          onClose={handleFileViewerClose}
+        />
+      );
+    }
+
     const workAreaContent = () => {
       switch (currentView) {
         case 'dashboard':
@@ -170,6 +198,7 @@ const App = () => {
           selectedFiles={selectedFiles}
           onFileSelect={handleFileSelection}
           onRepositoryLoad={handleRepositoryLoad}
+          onFileView={handleFileView}
           config={config}
         />
       </div>

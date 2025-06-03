@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import loggingService from '../services/LoggingService';
 import ApiService from '../services/ApiService';
 import NonFunctionalRequirementsLoader from './NonFunctionalRequirementsLoader';

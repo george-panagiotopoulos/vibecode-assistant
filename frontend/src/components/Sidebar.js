@@ -7,6 +7,7 @@ const Sidebar = ({
   selectedFiles = [], 
   onFileSelect, 
   onRepositoryLoad,
+  onFileView,
   config 
 }) => {
   const [repositoryUrl, setRepositoryUrl] = useState('');
@@ -81,128 +82,9 @@ const Sidebar = ({
     setExpandedFolders(newExpanded);
   };
 
-  const viewFile = async (file) => {
-    try {
-      // Open a new window to display file content
-      const newWindow = window.open('', '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
-      newWindow.document.write(`
-        <html>
-          <head>
-            <title>${file.name} - ${repositoryData?.files?.repository?.name || repositoryData?.repository?.name || 'Repository'}</title>
-            <style>
-              body { 
-                font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; 
-                margin: 20px; 
-                background: #1e1e1e; 
-                color: #cccccc; 
-                line-height: 1.5;
-              }
-              .header { 
-                background: #252526; 
-                padding: 15px; 
-                border-radius: 5px; 
-                margin-bottom: 20px; 
-                border: 1px solid #3c3c3c;
-              }
-              .file-path { 
-                color: #007acc; 
-                font-weight: bold; 
-                margin-bottom: 10px;
-              }
-              .copy-btn { 
-                background: #007acc; 
-                color: white; 
-                border: none; 
-                padding: 8px 16px; 
-                border-radius: 4px; 
-                cursor: pointer; 
-                font-size: 14px;
-              }
-              .copy-btn:hover { 
-                background: #005a9e; 
-              }
-              .content { 
-                background: #252526; 
-                padding: 20px; 
-                border-radius: 5px; 
-                border: 1px solid #3c3c3c; 
-                white-space: pre-wrap; 
-                overflow-x: auto;
-              }
-              .loading { 
-                text-align: center; 
-                color: #007acc; 
-                padding: 40px;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="header">
-              <div class="file-path">${file.path || file.name}</div>
-              <button class="copy-btn" onclick="copyToClipboard()">📋 Copy to Clipboard</button>
-            </div>
-            <div id="content" class="loading">Loading file content...</div>
-            <script>
-              let fileContent = '';
-              
-              async function loadFileContent() {
-                try {
-                  const response = await fetch('/api/repositories/file-content', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      repo_url: '${repositoryData?.files?.repository?.html_url || repositoryUrl}',
-                      file_path: '${file.path || file.name}',
-                      github_token: '${config?.github?.token || ''}'
-                    })
-                  });
-                  
-                  const result = await response.json();
-                  if (result.success && result.content) {
-                    // Extract the actual content from the response object
-                    fileContent = result.content.content || result.content;
-                    document.getElementById('content').innerHTML = '<div class="content">' + escapeHtml(fileContent) + '</div>';
-                  } else {
-                    document.getElementById('content').innerHTML = '<div class="content">Error: ' + (result.error || 'Failed to load file content') + '</div>';
-                  }
-                } catch (error) {
-                  document.getElementById('content').innerHTML = '<div class="content">Error loading file: ' + error.message + '</div>';
-                }
-              }
-              
-              function escapeHtml(text) {
-                const div = document.createElement('div');
-                div.textContent = text;
-                return div.innerHTML;
-              }
-              
-              function copyToClipboard() {
-                if (fileContent) {
-                  navigator.clipboard.writeText(fileContent).then(() => {
-                    const btn = document.querySelector('.copy-btn');
-                    const originalText = btn.innerHTML;
-                    btn.innerHTML = '✅ Copied!';
-                    btn.style.background = '#4caf50';
-                    setTimeout(() => {
-                      btn.innerHTML = originalText;
-                      btn.style.background = '#007acc';
-                    }, 2000);
-                  }).catch(err => {
-                    alert('Failed to copy to clipboard: ' + err.message);
-                  });
-                } else {
-                  alert('No content to copy');
-                }
-              }
-              
-              loadFileContent();
-            </script>
-          </body>
-        </html>
-      `);
-    } catch (error) {
-      console.error('Error viewing file:', error);
-      alert('Failed to open file viewer: ' + error.message);
+  const viewFile = (file) => {
+    if (onFileView) {
+      onFileView(file);
     }
   };
 
