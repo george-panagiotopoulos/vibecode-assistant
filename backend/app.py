@@ -979,21 +979,211 @@ def update_graph_node(node_id):
 
 @app.route('/api/graph/layers/<layer_name>', methods=['PUT'])
 def update_graph_layer(layer_name):
-    """Update a specific layer"""
+    """Update a custom layer"""
     if not neo4j_service or not neo4j_service.is_connected():
         return jsonify({"success": False, "error": "Neo4j service not available"}), 503
     
     try:
         layer_data = request.json
         
-        # Validate required fields
         if not layer_data or 'name' not in layer_data:
             return jsonify({"success": False, "error": "Layer name is required"}), 400
         
         updated_layer = neo4j_service.update_custom_layer(layer_name, layer_data)
         return jsonify({"success": True, "layer": updated_layer})
     except Exception as e:
-        logger.error(f"Error updating graph layer: {str(e)}")
+        logger.error(f"Error updating layer: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/export', methods=['POST'])
+def export_graph():
+    """Export current graph data as JSON"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        # Get export options from request
+        options = request.json or {}
+        include_metadata = options.get('include_metadata', True)
+        
+        # Export graph data
+        export_data = neo4j_service.export_graph_data(include_metadata=include_metadata)
+        
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"vibe_graph_export_{timestamp}.json"
+        
+        # Create response with proper headers for file download
+        response = Response(
+            json.dumps(export_data, indent=2, ensure_ascii=False),
+            mimetype='application/json',
+            headers={
+                'Content-Disposition': f'attachment; filename="{filename}"',
+                'Content-Type': 'application/json; charset=utf-8'
+            }
+        )
+        
+        logger.info(f"Graph exported successfully: {export_data['statistics']}")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error exporting graph: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/export/info', methods=['GET'])
+def get_export_info():
+    """Get information about what would be exported without actually exporting"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        # Get current graph data for statistics
+        graph_data = neo4j_service.get_all_nodes_and_edges()
+        custom_layers = neo4j_service.get_custom_layers()
+        
+        # Calculate statistics
+        layer_stats = {}
+        for node in graph_data['nodes']:
+            layer = node['layer'] or 'Other'
+            if layer not in layer_stats:
+                layer_stats[layer] = {'nodes': 0, 'types': set()}
+            layer_stats[layer]['nodes'] += 1
+            layer_stats[layer]['types'].add(node['type'])
+        
+        # Convert sets to lists for JSON serialization
+        for layer in layer_stats:
+            layer_stats[layer]['types'] = list(layer_stats[layer]['types'])
+        
+        export_info = {
+            'statistics': {
+                'total_nodes': len(graph_data['nodes']),
+                'total_edges': len(graph_data['edges']),
+                'total_layers': len(set(node['layer'] for node in graph_data['nodes'] if node['layer'])),
+                'custom_layers_count': len(custom_layers)
+            },
+            'layer_statistics': layer_stats,
+            'relationship_types': list(set(edge['type'] for edge in graph_data['edges'])),
+            'node_types': list(set(node['type'] for node in graph_data['nodes'])),
+            'custom_layers': custom_layers
+        }
+        
+        return jsonify({"success": True, "export_info": export_info})
+        
+    except Exception as e:
+        logger.error(f"Error getting export info: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/import/validate', methods=['POST'])
+def validate_import_data():
+    """Validate import data without actually importing"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        # Handle both JSON data and file uploads
+        import_data = None
+        
+        if request.is_json:
+            # Direct JSON validation
+            import_data = request.json
+        else:
+            # File upload validation
+            if 'file' not in request.files:
+                return jsonify({"success": False, "error": "No file provided"}), 400
+            
+            file = request.files['file']
+            if file.filename == '':
+                return jsonify({"success": False, "error": "No file selected"}), 400
+            
+            # Parse JSON from uploaded file
+            try:
+                file_content = file.read().decode('utf-8')
+                import_data = json.loads(file_content)
+            except json.JSONDecodeError as e:
+                return jsonify({"success": False, "error": f"Invalid JSON file: {str(e)}"}), 400
+            except UnicodeDecodeError as e:
+                return jsonify({"success": False, "error": f"File encoding error: {str(e)}"}), 400
+        
+        if not import_data:
+            return jsonify({"success": False, "error": "No import data provided"}), 400
+        
+        # Validate the import data
+        validation_result = neo4j_service.import_graph_data(
+            import_data, 
+            validate_only=True
+        )
+        
+        return jsonify({
+            "success": True, 
+            "validation": validation_result
+        })
+        
+    except Exception as e:
+        logger.error(f"Error validating import data: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/import', methods=['POST'])
+def import_graph():
+    """Import graph data from JSON"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        # Handle both JSON data and file uploads
+        import_data = None
+        options = {}
+        
+        if request.is_json:
+            # Direct JSON import
+            request_data = request.json
+            import_data = request_data.get('import_data')
+            options = request_data.get('options', {})
+        else:
+            # File upload
+            if 'file' not in request.files:
+                return jsonify({"success": False, "error": "No file provided"}), 400
+            
+            file = request.files['file']
+            if file.filename == '':
+                return jsonify({"success": False, "error": "No file selected"}), 400
+            
+            # Parse JSON from uploaded file
+            try:
+                file_content = file.read().decode('utf-8')
+                import_data = json.loads(file_content)
+            except json.JSONDecodeError as e:
+                return jsonify({"success": False, "error": f"Invalid JSON file: {str(e)}"}), 400
+            except UnicodeDecodeError as e:
+                return jsonify({"success": False, "error": f"File encoding error: {str(e)}"}), 400
+            
+            # Get options from form data
+            options = {
+                'graph_name': request.form.get('graph_name'),
+                'clear_existing': request.form.get('clear_existing', 'false').lower() == 'true'
+            }
+        
+        if not import_data:
+            return jsonify({"success": False, "error": "No import data provided"}), 400
+        
+        # Extract options
+        graph_name = options.get('graph_name')
+        clear_existing = options.get('clear_existing', False)
+        
+        # Import the graph data
+        import_result = neo4j_service.import_graph_data(
+            import_data,
+            graph_name=graph_name,
+            clear_existing=clear_existing
+        )
+        
+        if import_result.get('success'):
+            logger.info(f"Graph imported successfully: {import_result['statistics']}")
+            return jsonify(import_result)
+        else:
+            return jsonify(import_result), 400
+        
+    except Exception as e:
+        logger.error(f"Error importing graph: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.errorhandler(404)

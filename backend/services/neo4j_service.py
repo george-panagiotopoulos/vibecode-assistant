@@ -3,6 +3,7 @@ import logging
 from typing import Dict, List, Any, Optional
 from neo4j import GraphDatabase, Driver
 from neo4j.exceptions import ServiceUnavailable, AuthError
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -911,4 +912,361 @@ class Neo4jService:
                 
         except Exception as e:
             logger.error(f"Error updating custom layer: {e}")
-            raise 
+            raise
+
+    def export_graph_data(self, include_metadata: bool = True) -> Dict[str, Any]:
+        """Export complete graph data in a structured JSON format"""
+        if not self.driver:
+            raise Exception("Neo4j connection not available")
+        
+        try:
+            with self.driver.session() as session:
+                # Get all nodes with their properties
+                nodes_query = """
+                MATCH (n:Node)
+                RETURN n.id as id, n.name as name, n.description as description, 
+                       n.layer as layer, n.type as type,
+                       n.created_at as created_at, n.updated_at as updated_at
+                ORDER BY n.layer, n.name
+                """
+                
+                nodes_result = session.run(nodes_query)
+                nodes = []
+                for record in nodes_result:
+                    node_data = {
+                        'id': record['id'],
+                        'name': record['name'],
+                        'description': record['description'],
+                        'layer': record['layer'],
+                        'type': record['type']
+                    }
+                    
+                    # Include timestamps if metadata is requested
+                    if include_metadata:
+                        node_data.update({
+                            'created_at': record['created_at'].isoformat() if record['created_at'] else None,
+                            'updated_at': record['updated_at'].isoformat() if record['updated_at'] else None
+                        })
+                    
+                    nodes.append(node_data)
+                
+                # Get all relationships with their properties
+                edges_query = """
+                MATCH (a:Node)-[r]->(b:Node)
+                RETURN a.id as from_id, b.id as to_id, type(r) as relationship_type,
+                       r.created_at as created_at
+                """
+                
+                edges_result = session.run(edges_query)
+                edges = []
+                for record in edges_result:
+                    edge_data = {
+                        'from_id': record['from_id'],
+                        'to_id': record['to_id'],
+                        'type': record['relationship_type']
+                    }
+                    
+                    # Include timestamps if metadata is requested
+                    if include_metadata:
+                        edge_data['created_at'] = record['created_at'].isoformat() if record['created_at'] else None
+                    
+                    edges.append(edge_data)
+                
+                # Get custom layers
+                custom_layers = self.get_custom_layers()
+                
+                # Build export data structure
+                export_data = {
+                    'format_version': '1.0',
+                    'export_timestamp': datetime.now().isoformat(),
+                    'graph_data': {
+                        'nodes': nodes,
+                        'edges': edges,
+                        'custom_layers': custom_layers
+                    },
+                    'statistics': {
+                        'total_nodes': len(nodes),
+                        'total_edges': len(edges),
+                        'total_layers': len(set(node['layer'] for node in nodes if node['layer'])),
+                        'custom_layers_count': len(custom_layers)
+                    }
+                }
+                
+                if include_metadata:
+                    # Add layer statistics
+                    layer_stats = {}
+                    for node in nodes:
+                        layer = node['layer'] or 'Other'
+                        if layer not in layer_stats:
+                            layer_stats[layer] = {'nodes': 0, 'types': set()}
+                        layer_stats[layer]['nodes'] += 1
+                        layer_stats[layer]['types'].add(node['type'])
+                    
+                    # Convert sets to lists for JSON serialization
+                    for layer in layer_stats:
+                        layer_stats[layer]['types'] = list(layer_stats[layer]['types'])
+                    
+                    export_data['metadata'] = {
+                        'layer_statistics': layer_stats,
+                        'relationship_types': list(set(edge['type'] for edge in edges)),
+                        'node_types': list(set(node['type'] for node in nodes))
+                    }
+                
+                logger.info(f"✅ Graph data exported: {len(nodes)} nodes, {len(edges)} edges")
+                return export_data
+                
+        except Exception as e:
+            logger.error(f"❌ Error exporting graph data: {e}")
+            raise
+
+    def import_graph_data(self, import_data: Dict[str, Any], graph_name: str = None, 
+                         clear_existing: bool = False, validate_only: bool = False) -> Dict[str, Any]:
+        """Import graph data from exported JSON format"""
+        if not self.driver:
+            raise Exception("Neo4j connection not available")
+        
+        try:
+            # Validate import data structure
+            validation_result = self._validate_import_data(import_data)
+            if not validation_result['valid']:
+                return validation_result
+            
+            if validate_only:
+                return validation_result
+            
+            graph_data = import_data['graph_data']
+            nodes = graph_data['nodes']
+            edges = graph_data['edges']
+            custom_layers = graph_data.get('custom_layers', [])
+            
+            import_stats = {
+                'nodes_created': 0,
+                'nodes_updated': 0,
+                'edges_created': 0,
+                'layers_created': 0,
+                'errors': []
+            }
+            
+            with self.driver.session() as session:
+                # Clear existing data if requested
+                if clear_existing:
+                    self.clear_all_data()
+                    logger.info("Cleared existing graph data before import")
+                
+                # Create custom layers first
+                for layer_name in custom_layers:
+                    try:
+                        create_layer_query = """
+                        MERGE (l:CustomLayer {name: $layer_name})
+                        SET l.created_at = datetime()
+                        RETURN l
+                        """
+                        result = session.run(create_layer_query, {'layer_name': layer_name})
+                        if result.single():
+                            import_stats['layers_created'] += 1
+                    except Exception as e:
+                        import_stats['errors'].append(f"Error creating layer '{layer_name}': {str(e)}")
+                
+                # Import nodes
+                for node in nodes:
+                    try:
+                        # Check if node already exists
+                        check_query = "MATCH (n:Node {id: $id}) RETURN n"
+                        existing = session.run(check_query, {'id': node['id']}).single()
+                        
+                        if existing:
+                            # Update existing node
+                            update_query = """
+                            MATCH (n:Node {id: $id})
+                            SET n.name = $name,
+                                n.description = $description,
+                                n.layer = $layer,
+                                n.type = $type,
+                                n.updated_at = datetime()
+                            RETURN n
+                            """
+                            session.run(update_query, {
+                                'id': node['id'],
+                                'name': node['name'],
+                                'description': node['description'],
+                                'layer': node['layer'],
+                                'type': node['type']
+                            })
+                            import_stats['nodes_updated'] += 1
+                        else:
+                            # Create new node
+                            create_query = """
+                            CREATE (n:Node {
+                                id: $id,
+                                name: $name,
+                                description: $description,
+                                layer: $layer,
+                                type: $type,
+                                created_at: datetime(),
+                                updated_at: datetime()
+                            })
+                            RETURN n
+                            """
+                            session.run(create_query, {
+                                'id': node['id'],
+                                'name': node['name'],
+                                'description': node['description'],
+                                'layer': node['layer'],
+                                'type': node['type']
+                            })
+                            import_stats['nodes_created'] += 1
+                            
+                    except Exception as e:
+                        import_stats['errors'].append(f"Error importing node '{node['id']}': {str(e)}")
+                
+                # Import edges
+                for edge in edges:
+                    try:
+                        # Check if both nodes exist
+                        check_nodes_query = """
+                        MATCH (a:Node {id: $from_id})
+                        MATCH (b:Node {id: $to_id})
+                        RETURN a, b
+                        """
+                        nodes_exist = session.run(check_nodes_query, {
+                            'from_id': edge['from_id'],
+                            'to_id': edge['to_id']
+                        }).single()
+                        
+                        if not nodes_exist:
+                            import_stats['errors'].append(
+                                f"Cannot create edge {edge['from_id']} -> {edge['to_id']}: one or both nodes don't exist"
+                            )
+                            continue
+                        
+                        # Create edge (MERGE to avoid duplicates)
+                        create_edge_query = f"""
+                        MATCH (a:Node {{id: $from_id}})
+                        MATCH (b:Node {{id: $to_id}})
+                        MERGE (a)-[r:{edge['type']}]->(b)
+                        SET r.created_at = datetime()
+                        RETURN r
+                        """
+                        result = session.run(create_edge_query, {
+                            'from_id': edge['from_id'],
+                            'to_id': edge['to_id']
+                        })
+                        
+                        if result.single():
+                            import_stats['edges_created'] += 1
+                            
+                    except Exception as e:
+                        import_stats['errors'].append(f"Error importing edge {edge['from_id']} -> {edge['to_id']}: {str(e)}")
+                
+                # Save as named graph if graph_name is provided
+                if graph_name:
+                    try:
+                        current_graph_data = self.get_all_nodes_and_edges()
+                        self.save_graph(graph_name, current_graph_data)
+                        logger.info(f"Imported graph saved as '{graph_name}'")
+                    except Exception as e:
+                        import_stats['errors'].append(f"Error saving imported graph as '{graph_name}': {str(e)}")
+                
+                logger.info(f"✅ Graph import completed: {import_stats}")
+                
+                return {
+                    'success': True,
+                    'message': 'Graph data imported successfully',
+                    'statistics': import_stats,
+                    'total_errors': len(import_stats['errors'])
+                }
+                
+        except Exception as e:
+            logger.error(f"❌ Error importing graph data: {e}")
+            raise
+
+    def _validate_import_data(self, import_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate the structure and content of import data"""
+        errors = []
+        warnings = []
+        
+        # Check required top-level fields
+        if not isinstance(import_data, dict):
+            return {'valid': False, 'errors': ['Import data must be a JSON object']}
+        
+        if 'graph_data' not in import_data:
+            errors.append('Missing required field: graph_data')
+        
+        if 'format_version' not in import_data:
+            warnings.append('Missing format_version field')
+        elif import_data['format_version'] != '1.0':
+            warnings.append(f"Unknown format version: {import_data['format_version']}")
+        
+        if errors:
+            return {'valid': False, 'errors': errors, 'warnings': warnings}
+        
+        graph_data = import_data['graph_data']
+        
+        # Validate graph_data structure
+        if not isinstance(graph_data, dict):
+            errors.append('graph_data must be an object')
+            return {'valid': False, 'errors': errors, 'warnings': warnings}
+        
+        if 'nodes' not in graph_data:
+            errors.append('Missing required field: graph_data.nodes')
+        elif not isinstance(graph_data['nodes'], list):
+            errors.append('graph_data.nodes must be an array')
+        
+        if 'edges' not in graph_data:
+            errors.append('Missing required field: graph_data.edges')
+        elif not isinstance(graph_data['edges'], list):
+            errors.append('graph_data.edges must be an array')
+        
+        if errors:
+            return {'valid': False, 'errors': errors, 'warnings': warnings}
+        
+        # Validate nodes
+        node_ids = set()
+        for i, node in enumerate(graph_data['nodes']):
+            if not isinstance(node, dict):
+                errors.append(f'Node at index {i} must be an object')
+                continue
+            
+            # Check required node fields
+            required_fields = ['id', 'name', 'layer', 'type']
+            for field in required_fields:
+                if field not in node:
+                    errors.append(f'Node at index {i} missing required field: {field}')
+                elif not isinstance(node[field], str):
+                    errors.append(f'Node at index {i} field {field} must be a string')
+            
+            if 'id' in node:
+                if node['id'] in node_ids:
+                    errors.append(f'Duplicate node ID: {node["id"]}')
+                node_ids.add(node['id'])
+        
+        # Validate edges
+        for i, edge in enumerate(graph_data['edges']):
+            if not isinstance(edge, dict):
+                errors.append(f'Edge at index {i} must be an object')
+                continue
+            
+            # Check required edge fields
+            required_fields = ['from_id', 'to_id', 'type']
+            for field in required_fields:
+                if field not in edge:
+                    errors.append(f'Edge at index {i} missing required field: {field}')
+                elif not isinstance(edge[field], str):
+                    errors.append(f'Edge at index {i} field {field} must be a string')
+            
+            # Check if referenced nodes exist
+            if 'from_id' in edge and edge['from_id'] not in node_ids:
+                errors.append(f'Edge at index {i} references non-existent from_id: {edge["from_id"]}')
+            if 'to_id' in edge and edge['to_id'] not in node_ids:
+                errors.append(f'Edge at index {i} references non-existent to_id: {edge["to_id"]}')
+        
+        return {
+            'valid': len(errors) == 0,
+            'errors': errors,
+            'warnings': warnings,
+            'statistics': {
+                'nodes_count': len(graph_data['nodes']),
+                'edges_count': len(graph_data['edges']),
+                'unique_node_ids': len(node_ids)
+            }
+        } 

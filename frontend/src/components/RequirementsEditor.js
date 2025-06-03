@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { ApiService } from '../services/ApiService';
 
 const RequirementsEditor = () => {
   const [nodes, setNodes] = useState([]);
@@ -15,9 +16,24 @@ const RequirementsEditor = () => {
   const [showGraphVisualization, setShowGraphVisualization] = useState(false);
   const [showSaveGraph, setShowSaveGraph] = useState(false);
   const [showLoadGraph, setShowLoadGraph] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [graphName, setGraphName] = useState('');
   const [savedGraphs, setSavedGraphs] = useState([]);
   const [loadingGraphs, setLoadingGraphs] = useState(false);
+
+  // Export/Import state
+  const [exportInfo, setExportInfo] = useState(null);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importData, setImportData] = useState(null);
+  const [importValidation, setImportValidation] = useState(null);
+  const [importOptions, setImportOptions] = useState({
+    graph_name: '',
+    clear_existing: false,
+    include_metadata: true
+  });
 
   // NEW: Layer visibility state management
   // By default, all layers are collapsed (nodes hidden)
@@ -59,8 +75,6 @@ const RequirementsEditor = () => {
 
   // NEW LAYER MANAGEMENT SYSTEM - Backend Only
   const [layers, setLayers] = useState([]);
-  const [layersLoading, setLayersLoading] = useState(false);
-  const [layersError, setLayersError] = useState(null);
 
   /**
    * Toggle visibility of nodes for a specific layer
@@ -118,8 +132,8 @@ const RequirementsEditor = () => {
   
   // Fetch layers from backend
   const fetchLayers = useCallback(async () => {
-    setLayersLoading(true);
-    setLayersError(null);
+    setLoading(true);
+    setError(null);
     
     try {
       const response = await fetch('/api/graph/layers');
@@ -132,12 +146,12 @@ const RequirementsEditor = () => {
         // Initialize all layers as collapsed (nodes hidden) by default
         initializeLayerVisibility(layerList);
       } else {
-        setLayersError(result.error || 'Failed to fetch layers');
+        setError(result.error || 'Failed to fetch layers');
       }
     } catch (err) {
-      setLayersError('Network error: ' + err.message);
+      setError('Network error: ' + err.message);
     } finally {
-      setLayersLoading(false);
+      setLoading(false);
     }
   }, [initializeLayerVisibility]);
 
@@ -166,7 +180,7 @@ const RequirementsEditor = () => {
       return false;
     }
 
-    setLayersLoading(true);
+    setLoading(true);
     setError(null);
     
     try {
@@ -192,7 +206,7 @@ const RequirementsEditor = () => {
       setError('Network error: ' + err.message);
       return false;
     } finally {
-      setLayersLoading(false);
+      setLoading(false);
     }
   };
 
@@ -202,7 +216,7 @@ const RequirementsEditor = () => {
       return false;
     }
 
-    setLayersLoading(true);
+    setLoading(true);
     setError(null);
 
     try {
@@ -225,7 +239,7 @@ const RequirementsEditor = () => {
       setError('Network error: ' + err.message);
       return false;
     } finally {
-      setLayersLoading(false);
+      setLoading(false);
     }
   };
 
@@ -814,10 +828,127 @@ const RequirementsEditor = () => {
   const cancelEditLayer = () => {
     setShowEditLayer(false);
     setEditingLayer(null);
-    setEditLayerForm({
-      name: '',
-      description: ''
+    setEditLayerForm({ name: '', description: '' });
+  };
+
+  // Export/Import handlers
+  const handleExportGraph = async () => {
+    try {
+      setExportLoading(true);
+      setError(null);
+      
+      // Get export info first
+      const infoResponse = await ApiService.getExportInfo();
+      setExportInfo(infoResponse.export_info);
+      setShowExportModal(true);
+    } catch (error) {
+      console.error('Error getting export info:', error);
+      setError(`Failed to get export information: ${error.message}`);
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const executeExport = async (includeMetadata = true) => {
+    try {
+      setExportLoading(true);
+      setError(null);
+      
+      const result = await ApiService.exportGraph({
+        include_metadata: includeMetadata
+      });
+      
+      setShowExportModal(false);
+      setError(null);
+      
+      // Show success message
+      setTimeout(() => {
+        setError(`✅ Graph exported successfully as ${result.filename}`);
+        setTimeout(() => setError(null), 3000);
+      }, 100);
+      
+    } catch (error) {
+      console.error('Error exporting graph:', error);
+      setError(`Failed to export graph: ${error.message}`);
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const handleImportGraph = () => {
+    setShowImportModal(true);
+    setImportFile(null);
+    setImportData(null);
+    setImportValidation(null);
+    setImportOptions({
+      graph_name: '',
+      clear_existing: false,
+      include_metadata: true
     });
+  };
+
+  const handleFileSelect = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    setImportFile(file);
+    setImportData(null);
+    setImportValidation(null);
+
+    try {
+      // Read and validate the file
+      const jsonData = await ApiService.readFileAsJSON(file);
+      setImportData(jsonData);
+      
+      // Validate the import data
+      const validation = await ApiService.validateImportData(jsonData);
+      setImportValidation(validation.validation);
+      
+    } catch (error) {
+      console.error('Error reading import file:', error);
+      setError(`Error reading file: ${error.message}`);
+      setImportFile(null);
+    }
+  };
+
+  const executeImport = async () => {
+    if (!importFile || !importData) {
+      setError('No file selected for import');
+      return;
+    }
+
+    try {
+      setImportLoading(true);
+      setError(null);
+      
+      const result = await ApiService.importGraphFromFile(importFile, importOptions);
+      
+      if (result.success) {
+        setShowImportModal(false);
+        setError(null);
+        
+        // Refresh the graph data
+        await fetchGraphData();
+        
+        // Show success message
+        const stats = result.statistics;
+        const message = `✅ Import successful: ${stats.nodes_created} nodes created, ${stats.nodes_updated} nodes updated, ${stats.edges_created} edges created`;
+        setError(message);
+        setTimeout(() => setError(null), 5000);
+        
+        if (stats.errors && stats.errors.length > 0) {
+          console.warn('Import warnings:', stats.errors);
+        }
+      } else {
+        setError(`Import failed: ${result.message || 'Unknown error'}`);
+      }
+      
+    } catch (error) {
+      console.error('Error importing graph:', error);
+      setError(`Failed to import graph: ${error.message}`);
+    } finally {
+      setImportLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -892,6 +1023,22 @@ const RequirementsEditor = () => {
             className="btn-standard"
           >
             📂 Load Graph
+          </button>
+          <button
+            onClick={handleExportGraph}
+            disabled={loading || exportLoading || nodes.length === 0}
+            className="btn-standard"
+            title={nodes.length === 0 ? "No graph data to export" : "Export graph to JSON file"}
+          >
+            {exportLoading ? '🔄 Exporting...' : '📤 Export Graph'}
+          </button>
+          <button
+            onClick={handleImportGraph}
+            disabled={loading || importLoading}
+            className="btn-standard"
+            title="Import graph from JSON file"
+          >
+            {importLoading ? '🔄 Importing...' : '📥 Import Graph'}
           </button>
           <button
             onClick={handleLoadSampleData}
@@ -1637,6 +1784,233 @@ const RequirementsEditor = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && exportInfo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-vibe-darker p-6 rounded-lg border border-vibe-gray-dark w-full max-w-2xl">
+            <h3 className="text-lg font-medium text-vibe-gray mb-4">Export Graph Data</h3>
+            
+            <div className="space-y-4">
+              {/* Export Statistics */}
+              <div className="bg-vibe-dark p-4 rounded border border-vibe-gray-dark">
+                <h4 className="font-medium text-vibe-gray mb-3">Export Summary</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-vibe-blue">{exportInfo.statistics.total_nodes}</div>
+                    <div className="text-vibe-gray opacity-75">Nodes</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-vibe-green">{exportInfo.statistics.total_edges}</div>
+                    <div className="text-vibe-gray opacity-75">Edges</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-vibe-blue">{exportInfo.statistics.total_layers}</div>
+                    <div className="text-vibe-gray opacity-75">Layers</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-vibe-green">{exportInfo.statistics.custom_layers_count}</div>
+                    <div className="text-vibe-gray opacity-75">Custom Layers</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Layer Breakdown */}
+              {Object.keys(exportInfo.layer_statistics).length > 0 && (
+                <div className="bg-vibe-dark p-4 rounded border border-vibe-gray-dark">
+                  <h4 className="font-medium text-vibe-gray mb-3">Layer Breakdown</h4>
+                  <div className="space-y-2 max-h-32 overflow-y-auto">
+                    {Object.entries(exportInfo.layer_statistics).map(([layer, stats]) => (
+                      <div key={layer} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full ${getLayerColor(layer)}`}></div>
+                          <span className="text-vibe-gray">{layer}</span>
+                        </div>
+                        <div className="text-vibe-gray opacity-75">
+                          {stats.nodes} nodes ({stats.types.join(', ')})
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Export Options */}
+              <div className="bg-vibe-dark p-4 rounded border border-vibe-gray-dark">
+                <h4 className="font-medium text-vibe-gray mb-3">Export Options</h4>
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={importOptions.include_metadata}
+                      onChange={(e) => setImportOptions({...importOptions, include_metadata: e.target.checked})}
+                      className="rounded"
+                    />
+                    <span className="text-vibe-gray">Include metadata (timestamps, statistics)</span>
+                  </label>
+                  <p className="text-xs text-vibe-gray opacity-60">
+                    Metadata includes creation timestamps and detailed statistics. Disable for smaller file size.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-6 border-t border-vibe-gray-dark mt-6">
+              <button
+                onClick={() => executeExport(importOptions.include_metadata)}
+                disabled={exportLoading}
+                className="btn-add flex-1"
+              >
+                {exportLoading ? '🔄 Exporting...' : '📤 Export Graph'}
+              </button>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="btn-standard flex-1"
+                disabled={exportLoading}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-vibe-darker p-6 rounded-lg border border-vibe-gray-dark w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-medium text-vibe-gray mb-4">Import Graph Data</h3>
+            
+            <div className="space-y-4">
+              {/* File Selection */}
+              <div className="bg-vibe-dark p-4 rounded border border-vibe-gray-dark">
+                <h4 className="font-medium text-vibe-gray mb-3">Select File</h4>
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleFileSelect}
+                  className="w-full text-vibe-gray file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-vibe-blue file:text-white hover:file:bg-opacity-80"
+                />
+                <p className="text-xs text-vibe-gray opacity-60 mt-2">
+                  Select a JSON file exported from Vibe Assistant
+                </p>
+              </div>
+
+              {/* File Validation Results */}
+              {importValidation && (
+                <div className="bg-vibe-dark p-4 rounded border border-vibe-gray-dark">
+                  <h4 className="font-medium text-vibe-gray mb-3">File Validation</h4>
+                  
+                  {importValidation.valid ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-vibe-green">
+                        <span>✅</span>
+                        <span>File is valid and ready for import</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-4 text-sm">
+                        <div className="text-center">
+                          <div className="text-xl font-bold text-vibe-blue">{importValidation.statistics.nodes_count}</div>
+                          <div className="text-vibe-gray opacity-75">Nodes</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xl font-bold text-vibe-green">{importValidation.statistics.edges_count}</div>
+                          <div className="text-vibe-gray opacity-75">Edges</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xl font-bold text-vibe-blue">{importValidation.statistics.unique_node_ids}</div>
+                          <div className="text-vibe-gray opacity-75">Unique IDs</div>
+                        </div>
+                      </div>
+
+                      {importValidation.warnings && importValidation.warnings.length > 0 && (
+                        <div className="mt-3">
+                          <div className="text-yellow-500 text-sm font-medium mb-2">⚠️ Warnings:</div>
+                          <ul className="text-xs text-vibe-gray space-y-1">
+                            {importValidation.warnings.map((warning, index) => (
+                              <li key={index}>• {warning}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-vibe-red">
+                        <span>❌</span>
+                        <span>File validation failed</span>
+                      </div>
+                      
+                      <div className="text-sm">
+                        <div className="text-vibe-red font-medium mb-2">Errors:</div>
+                        <ul className="text-xs text-vibe-gray space-y-1">
+                          {importValidation.errors.map((error, index) => (
+                            <li key={index}>• {error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Import Options */}
+              {importValidation && importValidation.valid && (
+                <div className="bg-vibe-dark p-4 rounded border border-vibe-gray-dark">
+                  <h4 className="font-medium text-vibe-gray mb-3">Import Options</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-vibe-gray mb-2">
+                        Save as Named Graph (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={importOptions.graph_name}
+                        onChange={(e) => setImportOptions({...importOptions, graph_name: e.target.value})}
+                        className="input-primary w-full"
+                        placeholder="Enter a name to save this import as a named graph"
+                      />
+                    </div>
+                    
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={importOptions.clear_existing}
+                        onChange={(e) => setImportOptions({...importOptions, clear_existing: e.target.checked})}
+                        className="rounded"
+                      />
+                      <span className="text-vibe-gray">Clear existing graph data before import</span>
+                    </label>
+                    
+                    {importOptions.clear_existing && (
+                      <div className="bg-vibe-red bg-opacity-20 border border-vibe-red text-vibe-red p-3 rounded text-sm">
+                        ⚠️ Warning: This will permanently delete all current graph data before importing.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 pt-6 border-t border-vibe-gray-dark mt-6">
+              <button
+                onClick={executeImport}
+                disabled={importLoading || !importValidation || !importValidation.valid}
+                className="btn-add flex-1"
+              >
+                {importLoading ? '🔄 Importing...' : '📥 Import Graph'}
+              </button>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="btn-standard flex-1"
+                disabled={importLoading}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

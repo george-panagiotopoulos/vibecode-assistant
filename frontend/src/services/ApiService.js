@@ -369,6 +369,98 @@ export const ApiService = {
     return response.data;
   },
 
+  // Graph Export/Import operations
+  async getExportInfo() {
+    const response = await api.get('/api/graph/export/info');
+    return response.data;
+  },
+
+  async exportGraph(options = {}) {
+    try {
+      const response = await api.post('/api/graph/export', options, {
+        responseType: 'blob'
+      });
+      
+      // Create blob URL for download
+      const blob = new Blob([response.data], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      
+      // Extract filename from response headers
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = 'vibe_graph_export.json';
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+      
+      // Trigger download
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      return { success: true, filename };
+    } catch (error) {
+      console.error('Error exporting graph:', error);
+      throw error;
+    }
+  },
+
+  async validateImportData(importData) {
+    const response = await api.post('/api/graph/import/validate', importData);
+    return response.data;
+  },
+
+  async importGraph(importData, options = {}) {
+    const response = await api.post('/api/graph/import', {
+      import_data: importData,
+      options: options
+    });
+    return response.data;
+  },
+
+  async importGraphFromFile(file, options = {}) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Add options to form data
+    if (options.graph_name) {
+      formData.append('graph_name', options.graph_name);
+    }
+    if (options.clear_existing) {
+      formData.append('clear_existing', 'true');
+    }
+    
+    const response = await api.post('/api/graph/import', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
+  },
+
+  // Utility method to read file as JSON
+  async readFileAsJSON(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const json = JSON.parse(event.target.result);
+          resolve(json);
+        } catch (error) {
+          reject(new Error(`Invalid JSON file: ${error.message}`));
+        }
+      };
+      reader.onerror = () => reject(new Error('Error reading file'));
+      reader.readAsText(file);
+    });
+  },
+
   // Utility methods
   validateGitHubUrl(url) {
     const githubRegex = /^https:\/\/github\.com\/[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+\/?$/;
