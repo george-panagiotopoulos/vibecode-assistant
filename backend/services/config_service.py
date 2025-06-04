@@ -249,70 +249,74 @@ class ConfigService:
         return result
     
     def get_requirements(self, task_type: str = None) -> Dict[str, List[str]]:
-        """Get non-functional requirements"""
-        try:
-            config = self.get_config()
-            requirements = config.get('non_functional_requirements', {})
+        """
+        Get non-functional requirements - Updated to remove task_type dependency
+        
+        Returns:
+            Dict containing all available requirements
+        """
+        config = self.get_config()
+        requirements = config.get('non_functional_requirements', {})
+        
+        # Return all requirements without task_type filtering
+        return requirements
+
+    def update_requirements(self, requirements: List[str]) -> Dict[str, List[str]]:
+        """
+        Update non-functional requirements - Updated to remove task_type dependency
+        
+        Args:
+            requirements: List of requirements to store
             
-            if task_type:
-                return {task_type: requirements.get(task_type, [])}
-            
-            return requirements
-            
-        except Exception as e:
-            logger.error(f"Error getting requirements: {str(e)}")
-            return {}
+        Returns:
+            Dict containing updated requirements
+        """
+        config = self.get_config()
+        
+        # Store requirements in a general category
+        if 'non_functional_requirements' not in config:
+            config['non_functional_requirements'] = {}
+        
+        config['non_functional_requirements']['general'] = requirements
+        
+        self.update_config(config)
+        
+        logger.info(f"Requirements updated: {len(requirements)} items")
+        
+        return config['non_functional_requirements']
     
-    def update_requirements(self, task_type: str, requirements: List[str]) -> Dict[str, List[str]]:
-        """Update requirements for a specific task type"""
-        try:
-            config = self.get_config()
+    def get_system_prompt(self, enhancement_type: str = 'enhanced_prompt') -> str:
+        """
+        Get system prompt for enhancement type - Updated to use enhancement_type instead of task_type
+        
+        Args:
+            enhancement_type: Type of enhancement (full_specification, enhanced_prompt, rephrase)
             
-            if 'non_functional_requirements' not in config:
-                config['non_functional_requirements'] = {}
-            
-            config['non_functional_requirements'][task_type] = requirements
-            
-            # Save updated config
-            with open(self.config_file, 'w') as f:
-                json.dump(config, f, indent=2)
-            
-            logger.info(f"Requirements updated for task type: {task_type}")
-            return config['non_functional_requirements']
-            
-        except Exception as e:
-            logger.error(f"Error updating requirements: {str(e)}")
-            raise Exception(f"Failed to update requirements: {str(e)}")
+        Returns:
+            System prompt string
+        """
+        config = self.get_config()
+        system_prompts = config.get('system_prompts', {})
+        return system_prompts.get(enhancement_type, system_prompts.get('default', ''))
     
-    def get_system_prompt(self, task_type: str = 'development') -> str:
-        """Get system prompt for a specific task type"""
-        try:
-            config = self.get_config()
-            system_prompts = config.get('system_prompt', {})
-            return system_prompts.get(task_type, "")
-        except Exception as e:
-            logger.error(f"Error getting system prompt: {str(e)}")
-            return ""
-    
-    def update_system_prompt(self, task_type: str, prompt: str) -> None:
-        """Update system prompt for a specific task type"""
-        try:
-            config = self.get_config()
-            
-            if 'system_prompt' not in config:
-                config['system_prompt'] = {}
-            
-            config['system_prompt'][task_type] = prompt
-            
-            # Save updated config
-            with open(self.config_file, 'w') as f:
-                json.dump(config, f, indent=2)
-            
-            logger.info(f"System prompt updated for task type: {task_type}")
-            
-        except Exception as e:
-            logger.error(f"Error updating system prompt: {str(e)}")
-            raise Exception(f"Failed to update system prompt: {str(e)}")
+    def update_system_prompt(self, enhancement_type: str, prompt: str) -> None:
+        """
+        Update system prompt for enhancement type - Updated to use enhancement_type instead of task_type
+        
+        Args:
+            enhancement_type: Type of enhancement
+            prompt: New system prompt
+        """
+        config = self.get_config()
+        
+        if 'system_prompts' not in config:
+            config['system_prompts'] = {}
+        
+        config['system_prompts'][enhancement_type] = prompt
+        
+        self.update_config(config)
+        
+        logger.info(f"System prompt updated for enhancement type: {enhancement_type}")
     
     def get_github_config(self) -> Dict[str, str]:
         """Get GitHub configuration"""
@@ -333,7 +337,7 @@ class ConfigService:
             return {}
     
     def validate_config(self) -> Dict[str, Any]:
-        """Validate the current configuration"""
+        """Validate the current configuration - Updated to remove task_type dependencies"""
         try:
             config = self.get_config()
             validation_result = {
@@ -353,12 +357,17 @@ class ConfigService:
                 validation_result['errors'].append("AWS credentials not configured")
                 validation_result['is_valid'] = False
             
-            # Check non-functional requirements
+            # Check enhancement types configuration
+            system_prompts = config.get('system_prompts', {})
+            required_enhancement_types = ['full_specification', 'enhanced_prompt', 'rephrase']
+            for enhancement_type in required_enhancement_types:
+                if enhancement_type not in system_prompts:
+                    validation_result['warnings'].append(f"No system prompt defined for {enhancement_type}")
+            
+            # Check non-functional requirements (general validation)
             requirements = config.get('non_functional_requirements', {})
-            required_task_types = ['development', 'refactoring', 'testing']
-            for task_type in required_task_types:
-                if task_type not in requirements or not requirements[task_type]:
-                    validation_result['warnings'].append(f"No requirements defined for {task_type}")
+            if not requirements:
+                validation_result['warnings'].append("No non-functional requirements configured")
             
             return validation_result
             

@@ -19,8 +19,10 @@ const RequirementsEditor = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [graphName, setGraphName] = useState('');
+  const [graphType, setGraphType] = useState('nfr');
   const [savedGraphs, setSavedGraphs] = useState([]);
   const [loadingGraphs, setLoadingGraphs] = useState(false);
+  const [graphTypeFilter, setGraphTypeFilter] = useState('all');
 
   // Export/Import state
   const [exportInfo, setExportInfo] = useState(null);
@@ -442,15 +444,19 @@ const RequirementsEditor = () => {
       const response = await fetch('/api/graph/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ graph_name: graphName.trim() })
+        body: JSON.stringify({ 
+          graph_name: graphName.trim(),
+          graph_type: graphType
+        })
       });
       
       const result = await response.json();
       if (result.success) {
         setGraphName('');
+        setGraphType('nfr'); // Reset to default
         setShowSaveGraph(false);
         setError(null);
-        alert(`Graph "${graphName}" saved successfully!`);
+        alert(`Graph "${graphName}" saved successfully as ${graphType}!`);
       } else {
         setError(result.error || 'Failed to save graph');
       }
@@ -1540,12 +1546,29 @@ const RequirementsEditor = () => {
                   required
                 />
               </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-vibe-gray mb-2">
+                  Graph Type
+                </label>
+                <select
+                  value={graphType}
+                  onChange={(e) => setGraphType(e.target.value)}
+                  className="w-full px-3 py-2 bg-vibe-darker border border-vibe-gray-dark rounded text-vibe-gray focus:outline-none focus:border-vibe-blue"
+                >
+                  <option value="nfr">Non-Functional Requirements (NFR)</option>
+                  <option value="application_architecture">Application Architecture</option>
+                </select>
+                <p className="text-xs text-vibe-gray opacity-60 mt-1">
+                  Choose the type that best describes your graph content
+                </p>
+              </div>
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => {
                     setShowSaveGraph(false);
                     setGraphName('');
+                    setGraphType('nfr');
                   }}
                   className="px-4 py-2 text-vibe-gray hover:text-white transition-colors"
                 >

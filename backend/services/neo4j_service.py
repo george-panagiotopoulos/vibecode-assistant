@@ -406,10 +406,15 @@ class Neo4jService:
             logger.error(f"Error populating sample data: {e}")
             raise
 
-    def save_graph(self, graph_name: str, graph_data: Dict[str, Any]) -> bool:
-        """Save current graph data with a name"""
+    def save_graph(self, graph_name: str, graph_data: Dict[str, Any], graph_type: str = "nfr") -> bool:
+        """Save current graph data with a name and type"""
         if not self.driver:
             raise Exception("Neo4j connection not available")
+        
+        # Validate graph_type parameter
+        valid_types = ["nfr", "application_architecture"]
+        if graph_type not in valid_types:
+            raise ValueError(f"Invalid graph_type '{graph_type}'. Must be one of: {valid_types}")
         
         try:
             with self.driver.session() as session:
@@ -433,10 +438,11 @@ class Neo4jService:
                 """
                 session.run(delete_graph_query, {'graph_name': graph_name})
                 
-                # Create a new saved graph node
+                # Create a new saved graph node with graph_type
                 create_graph_query = """
                 CREATE (sg:SavedGraph {
                     name: $graph_name,
+                    graph_type: $graph_type,
                     created_at: datetime(),
                     nodes_count: $nodes_count,
                     edges_count: $edges_count
@@ -446,6 +452,7 @@ class Neo4jService:
                 
                 session.run(create_graph_query, {
                     'graph_name': graph_name,
+                    'graph_type': graph_type,
                     'nodes_count': len(graph_data['nodes']),
                     'edges_count': len(graph_data['edges'])
                 })
@@ -488,32 +495,50 @@ class Neo4jService:
                         'type': edge['type']
                     })
                 
-                logger.info(f"Graph '{graph_name}' saved successfully")
+                logger.info(f"Graph '{graph_name}' saved successfully with type '{graph_type}'")
                 return True
                 
         except Exception as e:
             logger.error(f"Error saving graph '{graph_name}': {e}")
             raise
 
-    def get_saved_graphs(self) -> List[Dict[str, Any]]:
-        """Get list of all saved graphs"""
+    def get_saved_graphs(self, graph_type: str = None) -> List[Dict[str, Any]]:
+        """Get list of all saved graphs, optionally filtered by type"""
         if not self.driver:
             raise Exception("Neo4j connection not available")
         
         try:
             with self.driver.session() as session:
-                query = """
-                MATCH (sg:SavedGraph)
-                RETURN sg.name as name, sg.created_at as created_at, 
-                       sg.nodes_count as nodes_count, sg.edges_count as edges_count
-                ORDER BY sg.created_at DESC
-                """
+                # Build query with optional graph_type filter
+                if graph_type:
+                    # Validate graph_type parameter
+                    valid_types = ["nfr", "application_architecture"]
+                    if graph_type not in valid_types:
+                        raise ValueError(f"Invalid graph_type '{graph_type}'. Must be one of: {valid_types}")
+                    
+                    query = """
+                    MATCH (sg:SavedGraph {graph_type: $graph_type})
+                    RETURN sg.name as name, sg.graph_type as graph_type, sg.created_at as created_at, 
+                           sg.nodes_count as nodes_count, sg.edges_count as edges_count
+                    ORDER BY sg.created_at DESC
+                    """
+                    result = session.run(query, {'graph_type': graph_type})
+                else:
+                    query = """
+                    MATCH (sg:SavedGraph)
+                    RETURN sg.name as name, 
+                           COALESCE(sg.graph_type, 'nfr') as graph_type,
+                           sg.created_at as created_at, 
+                           sg.nodes_count as nodes_count, sg.edges_count as edges_count
+                    ORDER BY sg.created_at DESC
+                    """
+                    result = session.run(query)
                 
-                result = session.run(query)
                 graphs = []
                 for record in result:
                     graphs.append({
                         'name': record['name'],
+                        'graph_type': record['graph_type'],
                         'created_at': record['created_at'].isoformat() if record['created_at'] else None,
                         'nodes_count': record['nodes_count'],
                         'edges_count': record['edges_count']

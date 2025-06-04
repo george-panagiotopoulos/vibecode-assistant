@@ -215,23 +215,32 @@ class BedrockService:
             logger.error(f"Error invoking Claude model: {str(e)}")
             raise
 
-    def extract_relevant_requirements(self, prompt, all_requirements, task_type):
-        """Extract relevant NFRs using LLM - no more mocks"""
+    def extract_relevant_requirements(self, prompt, all_requirements, enhancement_type="enhanced_prompt"):
+        """
+        Extract relevant requirements from the prompt using AI - Updated to remove task_type dependency
+        
+        Args:
+            prompt: User's input prompt
+            all_requirements: All available requirements
+            enhancement_type: Type of enhancement being performed
+            
+        Returns:
+            List of relevant requirements
+        """
         try:
-            if not all_requirements:
-                return []
-            
-            # Use LLM to select relevant requirements
-            selection_prompt = f"""Given this user request: "{prompt}"
-            
-And these available non-functional requirements for {task_type}:
-{chr(10).join(f"{i+1}. {req}" for i, req in enumerate(all_requirements))}
+            system_prompt = f"""
+You are an expert requirements analyst. Analyze the user's prompt and select the most relevant non-functional requirements from the provided list.
 
-Select the 3-5 most relevant requirements that apply to this specific request. 
-Respond with only the numbers (e.g., "1, 3, 5") of the relevant requirements."""
+User's prompt: {prompt}
+
+And these available non-functional requirements for {enhancement_type}:
+{json.dumps(all_requirements, indent=2)}
+
+Return only a JSON array of the requirement IDs that are most relevant to the user's request. Focus on requirements that directly impact the implementation approach.
+"""
 
             response = self.invoke_claude(
-                prompt=selection_prompt,
+                prompt=system_prompt,
                 max_tokens=100,
                 temperature=0.1
             )

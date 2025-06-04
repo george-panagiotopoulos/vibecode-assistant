@@ -125,34 +125,31 @@ export const ApiService = {
     return response.data;
   },
 
-  // Requirements operations
-  async getRequirements(taskType, config = {}) {
-    const response = await api.get('/api/requirements', {
-      params: { task_type: taskType }
-    });
+  // Requirements operations - Updated to remove task_type dependency
+  async getRequirements(config = {}) {
+    const response = await api.get('/api/requirements');
     return response.data;
   },
 
-  async updateRequirements(taskType, requirements, config = {}) {
+  async updateRequirements(requirements, config = {}) {
     const response = await api.post('/api/requirements', { 
-      task_type: taskType,
       requirements 
     });
     return response.data;
   },
 
-  // Enhanced prompt operation - the main feature
-  async enhancePrompt(prompt, taskType = 'development', selectedFiles = []) {
+  // Enhanced prompt operation - Updated to remove task_type and focus on enhancement_type
+  async enhancePrompt(prompt, enhancementType = 'enhanced_prompt', selectedFiles = []) {
     try {
       loggingService.logInfo('Starting prompt enhancement', {
         prompt: prompt.substring(0, 100) + '...',
-        taskType,
+        enhancementType,
         selectedFilesCount: selectedFiles.length
       });
 
       const response = await api.post('/api/enhance-prompt', {
         prompt,
-        task_type: taskType,
+        enhancement_type: enhancementType,
         selected_files: selectedFiles
       });
 
@@ -165,8 +162,58 @@ export const ApiService = {
       console.error('Error enhancing prompt:', error);
       loggingService.logError('enhance_prompt', error.message, {
         prompt: prompt.substring(0, 100) + '...',
-        taskType,
+        enhancementType,
         selectedFilesCount: selectedFiles.length,
+        error: error.toString()
+      });
+      throw error;
+    }
+  },
+
+  // Enhanced prompt operation with architecture integration - Updated to remove task_type
+  async enhancePromptWithArchitecture(prompt, options = {}) {
+    const {
+      selectedFiles = [],
+      architectureLayers = [],
+      requirements = [],
+      enhancementType = 'enhanced_prompt',
+      considerArchitecture = false
+    } = options;
+
+    try {
+      loggingService.logInfo('Starting architecture-enhanced prompt building', {
+        prompt: prompt.substring(0, 100) + '...',
+        enhancementType,
+        selectedFilesCount: selectedFiles.length,
+        architectureLayersCount: architectureLayers.length,
+        requirementsCount: requirements.length,
+        considerArchitecture
+      });
+
+      const response = await api.post('/api/enhance-prompt-with-architecture', {
+        prompt,
+        selected_files: selectedFiles,
+        architecture_layers: considerArchitecture ? architectureLayers : [],
+        requirements,
+        enhancement_type: enhancementType,
+        consider_architecture: considerArchitecture
+      });
+
+      loggingService.logInfo('Architecture-enhanced prompt building successful', {
+        responseLength: response.data.enhanced_prompt?.length || 0,
+        complexityLevel: response.data.complexity_analysis?.estimated_complexity || 'unknown',
+        architectureLayersProcessed: response.data.metadata?.architecture_layers_count || 0,
+        totalComponents: response.data.metadata?.total_components || 0
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error('Error enhancing prompt with architecture:', error);
+      loggingService.logError('enhance_prompt_with_architecture', error.message, {
+        prompt: prompt.substring(0, 100) + '...',
+        enhancementType,
+        selectedFilesCount: selectedFiles.length,
+        architectureLayersCount: architectureLayers.length,
         error: error.toString()
       });
       throw error;
@@ -288,8 +335,9 @@ export const ApiService = {
   },
 
   // Neo4j Graph operations
-  async getSavedGraphs() {
-    const response = await api.get('/api/graph/saved');
+  async getSavedGraphs(graphType = null) {
+    const params = graphType ? { graph_type: graphType } : {};
+    const response = await api.get('/api/graph/saved', { params });
     return response.data;
   },
 
@@ -304,10 +352,18 @@ export const ApiService = {
     return response.data;
   },
 
-  async saveGraph(graphName, graphData) {
+  async saveGraph(graphName, graphData, graphType = 'nfr') {
     const response = await api.post('/api/graph/save', {
       graph_name: graphName,
-      graph_data: graphData
+      graph_data: graphData,
+      graph_type: graphType
+    });
+    return response.data;
+  },
+
+  async updateGraphType(graphName, graphType) {
+    const response = await api.put(`/api/graph/saved/${graphName}/type`, {
+      graph_type: graphType
     });
     return response.data;
   },

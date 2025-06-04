@@ -39,6 +39,15 @@ A modern, intelligent coding assistant that helps developers enhance their promp
 - **Sample Data**: Pre-configured examples demonstrating software planning best practices
 - **Interactive Visualization**: View and manage nodes grouped by layer with relationship mapping
 
+### 🏗️ **Architecture-Enhanced Prompt Building** (NEW)
+- **Smart Architecture Integration**: Automatically incorporates application architecture data into prompt enhancement
+- **Context-Aware Generation**: Considers architectural relationships and dependencies when building prompts
+- **Complexity Analysis**: Analyzes prompt complexity based on architecture scope and provides recommendations
+- **Visual Indicators**: Clear UI indicators when architecture enhancement is active (🏗️ icons)
+- **Fallback Support**: Gracefully falls back to standard enhancement when architecture data is unavailable
+- **Real-time Status**: Live monitoring of Neo4j connection and architecture processing status
+- **Enhanced Metadata**: Detailed analytics including component counts, complexity levels, and processing metrics
+
 #### Supported Layers:
 - **UX**: User experience and usability concerns
 - **Architecture**: System design patterns and architectural decisions  
@@ -250,6 +259,7 @@ Customize the AI enhancement behavior by editing requirements in the Configurati
 
 ### AI & Prompt Enhancement
 - `POST /api/enhance-prompt` - Enhance prompts with AI
+- `POST /api/enhance-prompt-with-architecture` - Enhanced prompt building with architecture integration (NEW)
 - `POST /api/stream-response` - Stream AI responses in real-time
 
 ### Graph Database (NEW)
@@ -270,6 +280,35 @@ curl -X POST http://localhost:5000/api/enhance-prompt \
   -d '{
     "prompt": "Create a user authentication system",
     "task_type": "development"
+  }'
+```
+
+### Architecture-Enhanced Prompt Building (NEW)
+```bash
+curl -X POST http://localhost:5000/api/enhance-prompt-with-architecture \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Create a user authentication system with secure login",
+    "task_type": "development",
+    "enhancement_type": "balanced",
+    "architecture_layers": [
+      {
+        "name": "Authentication Layer",
+        "nodeCount": 5,
+        "nodes": [
+          {"name": "LoginController", "type": "controller"},
+          {"name": "AuthService", "type": "service"},
+          {"name": "UserRepository", "type": "repository"}
+        ]
+      }
+    ],
+    "requirements": [
+      {
+        "id": "security-001",
+        "name": "Data Security",
+        "description": "All user data must be encrypted"
+      }
+    ]
   }'
 ```
 
@@ -357,3 +396,25 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - Check the logs in the `/logs/` directory
 - Use the health check endpoints to verify service status
 - Review the Configuration panel for connection issues 
+
+## 🧪 Testing
+
+### Architecture Integration Testing (NEW)
+Test the new architecture-enhanced prompt building functionality:
+
+```bash
+# Start the backend first
+npm run start:backend
+
+# Run comprehensive architecture integration tests
+python scripts/test_architecture_integration.py
+```
+
+The test suite validates:
+- ✅ Architecture-enhanced prompt building
+- ✅ Fallback behavior when architecture data is unavailable  
+- ✅ Error handling with invalid data
+- ✅ Service integration status
+- ✅ Complexity analysis functionality
+
+For detailed documentation on architecture integration features, see: [`docs/ARCHITECTURE_INTEGRATION.md`](docs/ARCHITECTURE_INTEGRATION.md) 

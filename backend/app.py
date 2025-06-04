@@ -60,8 +60,16 @@ except Exception as e:
     raise
 
 try:
-    prompt_service = PromptService(bedrock_service)
-    logger.info("✅ PromptService initialized")
+    neo4j_service = Neo4jService()
+    logger.info("✅ Neo4jService initialized")
+except Exception as e:
+    logger.error(f"❌ Neo4jService failed: {e}")
+    # Don't raise here - Neo4j is optional for basic functionality
+    neo4j_service = None
+
+try:
+    prompt_service = PromptService(bedrock_service, neo4j_service)
+    logger.info("✅ PromptService initialized with architecture support")
 except Exception as e:
     logger.error(f"❌ PromptService failed: {e}")
     raise
@@ -72,14 +80,6 @@ try:
 except Exception as e:
     logger.error(f"❌ PromptConstructor failed: {e}")
     raise
-
-try:
-    neo4j_service = Neo4jService()
-    logger.info("✅ Neo4jService initialized")
-except Exception as e:
-    logger.error(f"❌ Neo4jService failed: {e}")
-    # Don't raise here - Neo4j is optional for basic functionality
-    neo4j_service = None
 
 # FORCE CHECK CONFIGURATION AT STARTUP
 try:
@@ -276,9 +276,11 @@ def get_folder_contents():
 
 @app.route('/api/requirements', methods=['GET', 'POST'])
 def handle_requirements():
+    """Handle requirements operations - Updated to remove task_type dependency"""
     if request.method == 'GET':
         try:
             config = config_service.get_config()
+            # Return all available requirements without task_type filtering
             requirements = config.get('non_functional_requirements', {})
             return jsonify({"success": True, "requirements": requirements})
         except Exception as e:
@@ -288,23 +290,24 @@ def handle_requirements():
     elif request.method == 'POST':
         try:
             data = request.get_json()
-            task_type = data.get('task_type')
             requirements = data.get('requirements', [])
             
-            if not task_type:
-                return jsonify({"success": False, "error": "Task type is required"}), 400
+            # Store requirements without task_type association
+            # This is now a simple storage operation for user-selected requirements
+            logger.info(f"Storing {len(requirements)} requirements")
             
-            # Update requirements using config service
-            updated_requirements = config_service.update_requirements(task_type, requirements)
-            
-            return jsonify({"success": True, "requirements": updated_requirements})
+            return jsonify({
+                "success": True, 
+                "message": f"Stored {len(requirements)} requirements",
+                "requirements": requirements
+            })
         except Exception as e:
-            logger.error(f"Error updating requirements: {str(e)}")
+            logger.error(f"Error handling requirements: {str(e)}")
             return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/enhance-prompt', methods=['POST'])
 def enhance_prompt():
-    """Enhanced prompt endpoint with real Bedrock integration"""
+    """Enhanced prompt endpoint with real Bedrock integration - Updated to remove task_type dependency"""
     try:
         data = request.get_json()
         
@@ -312,9 +315,9 @@ def enhance_prompt():
             return jsonify({'error': 'Prompt is required'}), 400
         
         user_prompt = data['prompt']
-        task_type = data.get('task_type', 'development')
         selected_files = data.get('selected_files', [])
-        enhancement_type = data.get('enhancement_type', 'development')  # New parameter
+        enhancement_type = data.get('enhancement_type', 'enhanced_prompt')
+        nfr_requirements = data.get('requirements', [])
         
         logger.info(f"Processing enhance-prompt request: {user_prompt[:100]}... (type: {enhancement_type})")
         
@@ -323,19 +326,11 @@ def enhance_prompt():
             endpoint='/api/enhance-prompt',
             request_data={
                 'prompt': user_prompt,
-                'task_type': task_type,
                 'enhancement_type': enhancement_type,
-                'selected_files_count': len(selected_files)
+                'selected_files_count': len(selected_files),
+                'requirements_count': len(nfr_requirements)
             }
         )
-        
-        # Get configuration and NFRs
-        config = config_service.get_config()
-        all_nfrs = config.get('non_functional_requirements', {}).get(task_type, [])
-        
-        # Initialize services
-        bedrock_service = BedrockService()
-        prompt_constructor = PromptConstructor(bedrock_service=bedrock_service, config_service=config_service)
         
         # Test Bedrock connection first
         if not bedrock_service.test_connection():
@@ -344,70 +339,190 @@ def enhance_prompt():
             logging_service.log_error("bedrock_connection", error_msg)
             return jsonify({'error': 'AI service temporarily unavailable'}), 503
         
-        # Construct the enhanced prompt with enhancement type
-        constructed_prompt = prompt_constructor.construct_enhanced_prompt(
-            user_input=user_prompt,
-            nfr_requirements=all_nfrs,
-            task_type=task_type,
-            file_context=selected_files,
-            config=config,
-            enhancement_type=enhancement_type
-        )
-        
-        # Get enhanced specification from LLM
-        enhanced_result = prompt_constructor.enhance_with_llm(constructed_prompt)
-        
-        logger.info(f"Successfully enhanced prompt for task_type: {task_type}, enhancement_type: {enhancement_type}")
-        
-        # Log successful response
-        logging_service.log_api_request(
-            endpoint='/api/enhance-prompt',
-            request_data={
-                'prompt': user_prompt,
-                'task_type': task_type,
-                'enhancement_type': enhancement_type,
-                'selected_files_count': len(selected_files)
-            },
-            response_data={
-                'success': True,
-                'enhanced_length': len(enhanced_result['enhanced_specification'])
-            }
-        )
-        
-        # Return response with logs for the frontend
-        return jsonify({
-            'enhanced_specification': enhanced_result['enhanced_specification'],
-            'original_input': enhanced_result['original_input'],
-            'task_type': enhanced_result['task_type'],
-            'enhancement_type': enhancement_type,
-            'metadata': enhanced_result['metadata'],
-            'logs': [
-                {
-                    'type': 'user_input',
-                    'content': user_prompt,
-                    'timestamp': datetime.now().isoformat(),
-                    'metadata': {'task_type': task_type, 'enhancement_type': enhancement_type, 'file_count': len(selected_files)}
+        # Use the updated prompt service for enhancement
+        try:
+            enhanced_result = prompt_service.enhance_prompt(
+                user_prompt=user_prompt,
+                nfr_requirements=nfr_requirements,
+                file_context=selected_files,
+                application_architecture=None,  # No architecture for basic enhancement
+                enhancement_type=enhancement_type
+            )
+            
+            logger.info(f"Successfully enhanced prompt with enhancement_type: {enhancement_type}")
+            
+            # Log successful response
+            logging_service.log_api_request(
+                endpoint='/api/enhance-prompt',
+                request_data={
+                    'prompt': user_prompt,
+                    'enhancement_type': enhancement_type,
+                    'selected_files_count': len(selected_files)
                 },
-                {
-                    'type': 'llm_prompt',
-                    'content': enhanced_result.get('constructed_prompt', ''),
-                    'timestamp': datetime.now().isoformat(),
-                    'metadata': {'nfr_count': enhanced_result['metadata']['nfr_count']}
-                },
-                {
-                    'type': 'llm_response',
-                    'content': enhanced_result['enhanced_specification'],
-                    'timestamp': datetime.now().isoformat(),
-                    'metadata': {'model_used': enhanced_result['metadata']['model_used']}
+                response_data={
+                    'success': True,
+                    'enhanced_length': len(enhanced_result)
                 }
-            ]
-        })
+            )
+            
+            # Return response with logs for the frontend
+            return jsonify({
+                'enhanced_specification': enhanced_result,
+                'original_input': user_prompt,
+                'enhancement_type': enhancement_type,
+                'metadata': {
+                    'requirements_count': len(nfr_requirements),
+                    'selected_files_count': len(selected_files),
+                    'architecture_enhanced': False
+                },
+                'logs': [
+                    {
+                        'type': 'user_input',
+                        'content': user_prompt,
+                        'timestamp': datetime.now().isoformat(),
+                        'metadata': {'enhancement_type': enhancement_type, 'file_count': len(selected_files)}
+                    },
+                    {
+                        'type': 'llm_response',
+                        'content': enhanced_result,
+                        'timestamp': datetime.now().isoformat(),
+                        'metadata': {'requirements_count': len(nfr_requirements)}
+                    }
+                ]
+            })
+            
+        except Exception as e:
+            error_msg = f"Error enhancing prompt: {str(e)}"
+            logger.error(error_msg)
+            logging_service.log_error("enhance_prompt_service", error_msg)
+            return jsonify({'error': f'Failed to enhance prompt: {str(e)}'}), 500
         
     except Exception as e:
         error_msg = f"Error in enhance-prompt endpoint: {str(e)}"
         logger.error(error_msg)
         logging_service.log_error("enhance_prompt", error_msg, {'prompt': user_prompt[:100] if 'user_prompt' in locals() else 'unknown'})
         return jsonify({'error': f'Failed to enhance prompt: {str(e)}'}), 500
+
+@app.route('/api/enhance-prompt-with-architecture', methods=['POST'])
+def enhance_prompt_with_architecture():
+    """Enhanced prompt endpoint with application architecture integration - Updated to remove task_type dependency"""
+    try:
+        data = request.get_json()
+        
+        if not data or 'prompt' not in data:
+            return jsonify({'error': 'Prompt is required'}), 400
+        
+        user_prompt = data['prompt']
+        selected_files = data.get('selected_files', [])
+        architecture_layers = data.get('architecture_layers', [])
+        requirements = data.get('requirements', [])
+        enhancement_type = data.get('enhancement_type', 'enhanced_prompt')
+        consider_architecture = data.get('consider_architecture', False)
+        
+        logger.info(f"Processing architecture-enhanced prompt: {user_prompt[:100]}... (type: {enhancement_type}, arch: {consider_architecture})")
+        
+        # Log the API request
+        logging_service.log_api_request(
+            endpoint='/api/enhance-prompt-with-architecture',
+            request_data={
+                'prompt': user_prompt,
+                'enhancement_type': enhancement_type,
+                'selected_files_count': len(selected_files),
+                'architecture_layers_count': len(architecture_layers),
+                'requirements_count': len(requirements),
+                'consider_architecture': consider_architecture
+            }
+        )
+        
+        # Test services availability
+        if not bedrock_service.test_connection():
+            error_msg = "Bedrock connection test failed"
+            logger.error(error_msg)
+            logging_service.log_error("bedrock_connection", error_msg)
+            return jsonify({'error': 'AI service temporarily unavailable'}), 503
+        
+        # Use the enhanced prompt service with architecture support
+        try:
+            # Only pass architecture layers if explicitly requested
+            application_architecture = architecture_layers if consider_architecture else None
+            
+            # Convert requirements list to proper format if needed
+            nfr_requirements = []
+            if requirements:
+                for req in requirements:
+                    if isinstance(req, dict):
+                        # Extract description or name from requirement object
+                        req_text = req.get('description', req.get('name', str(req)))
+                        nfr_requirements.append(req_text)
+                    else:
+                        nfr_requirements.append(str(req))
+            
+            # Call the prompt service to get the enhanced response
+            enhanced_response = prompt_service.enhance_prompt(
+                user_prompt=user_prompt,
+                nfr_requirements=nfr_requirements,
+                file_context=selected_files,
+                application_architecture=application_architecture,
+                enhancement_type=enhancement_type,
+                return_string_only=True  # Return only the string response
+            )
+            
+            # Analyze prompt complexity including architecture
+            complexity_analysis = prompt_service.analyze_prompt_complexity(
+                user_prompt, 
+                architecture_layers if consider_architecture else []
+            )
+            
+            # Get architecture integration status
+            integration_status = prompt_service.get_architecture_integration_status()
+            
+            logger.info(f"Successfully built architecture-enhanced prompt with enhancement_type: {enhancement_type}")
+            
+            # Log successful response
+            logging_service.log_api_request(
+                endpoint='/api/enhance-prompt-with-architecture',
+                request_data={
+                    'prompt': user_prompt,
+                    'enhancement_type': enhancement_type,
+                    'architecture_layers_count': len(architecture_layers),
+                    'consider_architecture': consider_architecture
+                },
+                response_data={
+                    'success': True,
+                    'enhanced_length': len(enhanced_response),
+                    'complexity': complexity_analysis.get('estimated_complexity', 'unknown')
+                }
+            )
+            
+            # Return comprehensive response with the enhanced_prompt as a string
+            return jsonify({
+                'enhanced_prompt': enhanced_response,  # This is now a string from LLM
+                'original_input': user_prompt,
+                'enhancement_type': enhancement_type,
+                'complexity_analysis': complexity_analysis,
+                'integration_status': integration_status,
+                'metadata': {
+                    'architecture_layers_count': len(architecture_layers) if consider_architecture else 0,
+                    'requirements_count': len(requirements),
+                    'selected_files_count': len(selected_files),
+                    'total_components': sum(layer.get('nodeCount', 0) for layer in architecture_layers) if consider_architecture else 0,
+                    'neo4j_available': integration_status.get('neo4j_available', False),
+                    'architecture_enhanced': consider_architecture and len(architecture_layers) > 0
+                },
+                'success': True
+            })
+            
+        except Exception as e:
+            error_msg = f"Error in architecture-enhanced prompt building: {str(e)}"
+            logger.error(error_msg)
+            logging_service.log_error("enhance_prompt_with_architecture_service", error_msg)
+            return jsonify({'error': f'Failed to build architecture-enhanced prompt: {str(e)}'}), 500
+        
+    except Exception as e:
+        error_msg = f"Error in enhance-prompt-with-architecture endpoint: {str(e)}"
+        logger.error(error_msg)
+        logging_service.log_error("enhance_prompt_with_architecture", error_msg, {'prompt': user_prompt[:100] if 'user_prompt' in locals() else 'unknown'})
+        return jsonify({'error': f'Failed to enhance prompt with architecture: {str(e)}'}), 500
 
 @app.route('/api/stream-response', methods=['POST'])
 def stream_response():
@@ -841,16 +956,25 @@ def test_aws_connection():
 
 @app.route('/api/graph/save', methods=['POST'])
 def save_graph():
-    """Save current graph with a name"""
+    """Save current graph with a name and optional type"""
     if not neo4j_service or not neo4j_service.is_connected():
         return jsonify({"success": False, "error": "Neo4j service not available"}), 503
     
     try:
         data = request.get_json()
         graph_name = data.get('graph_name')
+        graph_type = data.get('graph_type', 'nfr')  # Default to 'nfr' for backward compatibility
         
         if not graph_name or not graph_name.strip():
             return jsonify({"success": False, "error": "Graph name is required"}), 400
+        
+        # Validate graph_type
+        valid_types = ["nfr", "application_architecture"]
+        if graph_type not in valid_types:
+            return jsonify({
+                "success": False, 
+                "error": f"Invalid graph_type '{graph_type}'. Must be one of: {valid_types}"
+            }), 400
         
         # Get current graph data
         graph_data = neo4j_service.get_all_nodes_and_edges()
@@ -858,32 +982,42 @@ def save_graph():
         if not graph_data['nodes']:
             return jsonify({"success": False, "error": "No graph data to save"}), 400
         
-        # Save the graph
-        success = neo4j_service.save_graph(graph_name.strip(), graph_data)
+        # Save the graph with type
+        success = neo4j_service.save_graph(graph_name.strip(), graph_data, graph_type)
         
         if success:
             return jsonify({
                 "success": True, 
-                "message": f"Graph '{graph_name}' saved successfully",
+                "message": f"Graph '{graph_name}' saved successfully as {graph_type}",
+                "graph_type": graph_type,
                 "nodes_count": len(graph_data['nodes']),
                 "edges_count": len(graph_data['edges'])
             })
         else:
             return jsonify({"success": False, "error": "Failed to save graph"}), 500
             
+    except ValueError as e:
+        logger.error(f"Validation error saving graph: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
         logger.error(f"Error saving graph: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/graph/saved', methods=['GET'])
 def get_saved_graphs():
-    """Get list of all saved graphs"""
+    """Get list of all saved graphs, optionally filtered by type"""
     if not neo4j_service or not neo4j_service.is_connected():
         return jsonify({"success": False, "error": "Neo4j service not available"}), 503
     
     try:
-        saved_graphs = neo4j_service.get_saved_graphs()
+        # Get optional graph_type filter from query parameters
+        graph_type = request.args.get('graph_type')
+        
+        saved_graphs = neo4j_service.get_saved_graphs(graph_type)
         return jsonify({"success": True, "graphs": saved_graphs})
+    except ValueError as e:
+        logger.error(f"Validation error getting saved graphs: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 400
     except Exception as e:
         logger.error(f"Error getting saved graphs: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -1184,6 +1318,62 @@ def import_graph():
         
     except Exception as e:
         logger.error(f"Error importing graph: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/graph/saved/<graph_name>/type', methods=['PUT'])
+def update_graph_type(graph_name):
+    """Update the type of a saved graph"""
+    if not neo4j_service or not neo4j_service.is_connected():
+        return jsonify({"success": False, "error": "Neo4j service not available"}), 503
+    
+    try:
+        data = request.get_json()
+        new_graph_type = data.get('graph_type')
+        
+        if not new_graph_type:
+            return jsonify({"success": False, "error": "graph_type is required"}), 400
+        
+        # Validate graph_type
+        valid_types = ["nfr", "application_architecture"]
+        if new_graph_type not in valid_types:
+            return jsonify({
+                "success": False, 
+                "error": f"Invalid graph_type '{new_graph_type}'. Must be one of: {valid_types}"
+            }), 400
+        
+        # Update the graph type in Neo4j
+        with neo4j_service.driver.session() as session:
+            # Check if graph exists
+            check_query = """
+            MATCH (sg:SavedGraph {name: $graph_name})
+            RETURN count(sg) as count
+            """
+            result = session.run(check_query, {'graph_name': graph_name})
+            if result.single()['count'] == 0:
+                return jsonify({"success": False, "error": f"Graph '{graph_name}' not found"}), 404
+            
+            # Update the graph type
+            update_query = """
+            MATCH (sg:SavedGraph {name: $graph_name})
+            SET sg.graph_type = $graph_type, sg.updated_at = datetime()
+            RETURN sg
+            """
+            session.run(update_query, {
+                'graph_name': graph_name,
+                'graph_type': new_graph_type
+            })
+        
+        logger.info(f"Graph '{graph_name}' type updated to '{new_graph_type}'")
+        return jsonify({
+            "success": True, 
+            "message": f"Graph '{graph_name}' type updated to '{new_graph_type}'"
+        })
+        
+    except ValueError as e:
+        logger.error(f"Validation error updating graph type: {str(e)}")
+        return jsonify({"success": False, "error": str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error updating graph type: {str(e)}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 @app.errorhandler(404)

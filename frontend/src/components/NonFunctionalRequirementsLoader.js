@@ -25,7 +25,8 @@ const NonFunctionalRequirementsLoader = ({ isOpen, onClose, onNodesSelected }) =
     setLoading(true);
     setError('');
     try {
-      const response = await ApiService.getSavedGraphs();
+      // Filter for NFR graphs only
+      const response = await ApiService.getSavedGraphs('nfr');
       setSavedGraphs(response.graphs || []);
       loggingService.logInfo('Loaded saved graphs for Non-Functional Requirements selection', {
         count: response.graphs?.length || 0

@@ -1,0 +1,167 @@
+{
+  "system_prompts": {
+    "default": "You are an expert AI coding assistant. Provide detailed, actionable specifications for coding projects.",
+    "development": "You are an expert software developer with deep knowledge of modern web technologies, best practices, and design patterns. Focus on creating clean, maintainable, and scalable solutions.",
+    "refactoring": "You are an expert code reviewer and software architect specializing in improving existing codebases. Focus on enhancing structure, performance, and maintainability while preserving functionality.",
+    "testing": "You are an expert QA engineer and test automation specialist. Focus on comprehensive testing strategies, edge cases, and ensuring software quality and reliability.",
+    "full_specification": "You are an expert business analyst and technical architect specializing in comprehensive project planning. Create detailed functional and non-functional specifications with complete task breakdowns. Your specifications should include clear business benefits, detailed task lists, and proper testing phases.",
+    "enhanced_prompt": "You are an expert AI coding assistant specializing in structured implementation planning. Create clear 8-12 step implementation plans where each step includes both functional and non-functional requirements. Focus on actionable steps with clear requirement alignment.",
+    "rephrase": "You are an expert technical writer specializing in prompt optimization. Your task is to rephrase user input to make it more concise, clear, and effective for LLM processing while preserving the original intent and requirements."
+  },
+  
+  "task_contexts": {
+    "development": "You are helping with new feature development or application creation. Focus on writing clean, maintainable, and well-tested code that aligns with the existing architecture.",
+    "refactoring": "You are helping with code refactoring. Focus on improving code structure, performance, and maintainability while preserving functionality and architectural integrity.",
+    "testing": "You are helping with testing and debugging. Focus on comprehensive test coverage, edge cases, and systematic problem-solving approaches that consider architectural boundaries."
+  },
+  
+  "enhancement_instructions": {
+    "full_specification": {
+      "title": "FULL SPECIFICATION REQUEST",
+      "description": "Create a comprehensive functional and non-functional specification with detailed task planning for this {task_type} project.",
+      "requirements": [
+        "Start with a detailed description of the task including goals and business benefits",
+        "Create a comprehensive list of tasks needed to complete the project",
+        "If there are more than 10 tasks, organize them into logical task groups",
+        "Add one round of testing at the end of each task group",
+        "Each task should include relevant functional and non-functional requirements",
+        "Consider all inputs: user requirements, non-functional requirements, selected files, and architecture context"
+      ],
+      "structure": [
+        "**Project Description** - Detailed task description with goals and business benefits",
+        "**Task Planning** - Comprehensive task breakdown with testing phases",
+        "**Functional Requirements** - Specific features and capabilities for each task",
+        "**Non-Functional Requirements** - Performance, security, scalability requirements per task",
+        "**Testing Strategy** - Testing approach for each task group"
+      ],
+      "important_note": "Provide a complete specification that serves as a comprehensive project plan with clear business value and detailed implementation roadmap."
+    },
+    
+    "enhanced_prompt": {
+      "title": "ENHANCED IMPLEMENTATION PLAN",
+      "description": "Create a structured 8-12 step implementation plan for this {task_type} project.",
+      "requirements": [
+        "Provide exactly 8-12 implementation steps",
+        "Each step must include both functional and non-functional requirements",
+        "Clearly outline requirements relevant to each specific step",
+        "Place any transversal non-functional requirements at the end",
+        "Structure as a numbered list with clear step descriptions",
+        "Consider all inputs: user requirements, non-functional requirements, selected files, and architecture context"
+      ],
+      "structure": [
+        "**Step-by-Step Plan** - 8-12 numbered implementation steps",
+        "**Functional Requirements per Step** - Specific functionality for each step",
+        "**Non-Functional Requirements per Step** - Performance, security, etc. for each step",
+        "**Transversal Requirements** - Cross-cutting non-functional requirements"
+      ],
+      "important_note": "Focus on creating a balanced implementation plan that clearly maps requirements to specific implementation steps."
+    },
+    
+    "rephrase": {
+      "title": "PROMPT OPTIMIZATION",
+      "description": "Rephrase the user input to make it more concise and effective for LLM processing.",
+      "requirements": [
+        "Make the language more concise and clear",
+        "Preserve the original intent and all requirements",
+        "Optimize for LLM understanding and processing",
+        "Do not add new instructions or split into tasks",
+        "Focus only on improving clarity and conciseness"
+      ],
+      "output_format": [
+        "**Rephrased Request**: A clear, concise version of the user's input optimized for LLM processing"
+      ],
+      "important_note": "Only rephrase for clarity and conciseness. Do not add implementation details, steps, or additional instructions."
+    },
+    
+    "default": {
+      "title": "ENHANCEMENT INSTRUCTIONS",
+      "description": "Transform the above user request into a comprehensive Business Requirements Specification for this {task_type} project.",
+      "sections": [
+        "**Executive Summary** - Clear project objective and scope",
+        "**Functional Requirements** - Specific features and capabilities",
+        "**Technical Specifications** - Architecture, technology stack, and implementation details",
+        "**Implementation Strategy** - Development approach and milestones",
+        "**Quality Assurance** - Testing strategy and quality standards",
+        "**Success Criteria** - Measurable acceptance criteria"
+      ],
+      "important_note": "Provide a detailed, actionable specification that serves as a complete Business Requirements Document."
+    }
+  },
+  
+  "task_guidelines": {
+    "development": [
+      "Write clean, readable, and maintainable code",
+      "Include appropriate error handling and validation",
+      "Consider performance implications",
+      "Add necessary documentation and comments",
+      "Think about testing strategies",
+      "Follow established patterns and conventions"
+    ],
+    "refactoring": [
+      "Preserve existing functionality while improving structure",
+      "Identify and eliminate code duplication",
+      "Improve naming and organization",
+      "Consider performance optimizations",
+      "Maintain or improve test coverage",
+      "Document significant changes and rationale"
+    ],
+    "testing": [
+      "Ensure comprehensive test coverage including edge cases",
+      "Use appropriate testing strategies (unit, integration, e2e)",
+      "Include both positive and negative test scenarios",
+      "Consider error conditions and boundary values",
+      "Make tests maintainable and well-documented",
+      "Follow testing best practices and patterns"
+    ]
+  },
+  
+  "architecture_guidelines": [
+    "Respect architectural layer boundaries and responsibilities",
+    "Ensure new code fits within the existing architectural patterns",
+    "Consider the impact on related architectural components",
+    "Maintain consistency with the established architectural style"
+  ],
+  
+  "prompt_templates": {
+    "header": "# VIBE CODING ASSISTANT - ENHANCED SPECIFICATION REQUEST",
+    "sections": {
+      "task_info": "**Task Type:** {task_type}\n**Timestamp:** {timestamp}",
+      "original_request": "## ORIGINAL USER REQUEST\n```\n{user_input}\n```",
+      "nfr_section": "## NON-FUNCTIONAL REQUIREMENTS\nThe following non-functional requirements must be incorporated:",
+      "codebase_context": "## CODEBASE CONTEXT\nSelected files for context ({file_count} files):",
+      "project_config": "## PROJECT CONFIGURATION",
+      "architecture_context": "## APPLICATION ARCHITECTURE CONTEXT",
+      "referenced_files": "## REFERENCED FILES\nPlease reference and consider the following files:",
+      "guidelines": "## GUIDELINES"
+    }
+  },
+  
+  "validation_rules": {
+    "min_prompt_length": 10,
+    "max_file_display": 10,
+    "max_components_per_layer": 10,
+    "max_total_components": 50,
+    "high_complexity_threshold": 300,
+    "medium_complexity_threshold": 150,
+    "complexity_thresholds": {
+      "low": 150,
+      "medium": 300,
+      "high": 500
+    }
+  },
+  
+  "file_patterns": {
+    "extensions": [
+      "py", "js", "ts", "tsx", "java", "cpp", "c", "h", "hpp",
+      "css", "scss", "html", "json", "xml", "yaml", "yml"
+    ],
+    "regex_patterns": [
+      "`([^`]+\\.[a-zA-Z0-9]+)`",
+      "([a-zA-Z0-9_/.-]+\\.[a-zA-Z0-9]+)",
+      "(\\w+\\.py)",
+      "(\\w+\\.js)",
+      "(\\w+\\.tsx?)",
+      "(\\w+\\.java)"
+    ]
+  }
+} 
