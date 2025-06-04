@@ -1,0 +1,258 @@
+/**
+ * PromptBuilder Custom Styles
+ * 
+ * Step 5: Custom scrollbar styling for enhanced UX
+ * NFR 9: Visual appeal and consistency
+ * NFR 11: Cross-browser responsive design
+ * NFR 12: Consistent user experience
+ */
+
+/* Custom scrollbar for response box and collapsible sections */
+.prompt-builder-scrollbar {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: #007acc #3c3c3c;
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+.prompt-builder-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.prompt-builder-scrollbar::-webkit-scrollbar-track {
+  background: #3c3c3c;
+  border-radius: 4px;
+}
+
+.prompt-builder-scrollbar::-webkit-scrollbar-thumb {
+  background: #007acc;
+  border-radius: 4px;
+  border: 1px solid #3c3c3c;
+}
+
+.prompt-builder-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #005a9e;
+}
+
+.prompt-builder-scrollbar::-webkit-scrollbar-corner {
+  background: #3c3c3c;
+}
+
+/* Auto-expanding response box styles */
+.response-box-auto-expand {
+  transition: height 0.3s ease-in-out;
+  resize: vertical;
+  min-height: 200px;
+  max-height: 80vh; /* Responsive max height */
+}
+
+/* Smooth collapse/expand animations for sections */
+.section-collapse-enter {
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: all 0.3s ease-in-out;
+}
+
+.section-collapse-enter-active {
+  opacity: 1;
+  max-height: 200px;
+}
+
+.section-collapse-exit {
+  opacity: 1;
+  max-height: 200px;
+  transition: all 0.3s ease-in-out;
+}
+
+.section-collapse-exit-active {
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+}
+
+/* Enhanced button hover effects */
+.toggle-button {
+  transition: all 0.2s ease-in-out;
+}
+
+.toggle-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 122, 204, 0.3);
+}
+
+/* Responsive design adjustments */
+@media (max-width: 768px) {
+  .response-box-auto-expand {
+    max-height: 60vh;
+  }
+  
+  .prompt-builder-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .prompt-builder-scrollbar::-webkit-scrollbar-thumb {
+    background: #ffffff;
+    border: 2px solid #000000;
+  }
+  
+  .prompt-builder-scrollbar::-webkit-scrollbar-track {
+    background: #000000;
+    border: 1px solid #ffffff;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .response-box-auto-expand,
+  .section-collapse-enter,
+  .section-collapse-exit,
+  .toggle-button {
+    transition: none;
+  }
+}
+
+/* Enhanced Response Box Styles for Dynamic Sizing */
+.response-box-dynamic {
+  transition: height 0.3s ease, max-height 0.3s ease;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--vibe-blue) var(--vibe-darker);
+}
+
+.response-box-dynamic::-webkit-scrollbar {
+  width: 8px;
+}
+
+.response-box-dynamic::-webkit-scrollbar-track {
+  background: var(--vibe-darker);
+  border-radius: 4px;
+}
+
+.response-box-dynamic::-webkit-scrollbar-thumb {
+  background: var(--vibe-blue);
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.response-box-dynamic::-webkit-scrollbar-thumb:hover {
+  background: #0099ff;
+}
+
+.response-box-fixed {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Streaming indicator animation */
+.streaming-indicator {
+  position: relative;
+}
+
+.streaming-indicator::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--vibe-blue),
+    transparent
+  );
+  animation: streaming-progress 2s infinite;
+  z-index: 1;
+}
+
+@keyframes streaming-progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Auto-scroll controls styling */
+.auto-scroll-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  border: 1px solid var(--vibe-gray-dark);
+  border-radius: 4px;
+  background: var(--vibe-darker);
+  color: var(--vibe-gray);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.auto-scroll-toggle:hover {
+  background: var(--vibe-blue);
+  border-color: var(--vibe-blue);
+  color: white;
+}
+
+.auto-scroll-toggle.active {
+  background: var(--vibe-green);
+  border-color: var(--vibe-green);
+  color: white;
+}
+
+/* Auto-scroll status indicator */
+.auto-scroll-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.auto-scroll-status.enabled {
+  background: rgba(76, 175, 80, 0.2);
+  color: var(--vibe-green);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.auto-scroll-status.disabled {
+  background: rgba(244, 67, 54, 0.2);
+  color: var(--vibe-red);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+/* Responsive improvements */
+@media (max-width: 768px) {
+  .response-box-dynamic {
+    max-height: 60vh;
+  }
+  
+  .auto-scroll-toggle {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+}
+
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+  .response-box-dynamic {
+    transition: none;
+  }
+  
+  .streaming-indicator::before {
+    animation: none;
+  }
+  
+  .auto-scroll-toggle {
+    transition: none;
+  }
+} 

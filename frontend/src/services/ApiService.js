@@ -4,7 +4,7 @@ import loggingService from './LoggingService';
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000, // Increased timeout for LLM calls
+  timeout: 60000, // Increased timeout to 60 seconds for LLM calls to handle longer responses
 });
 
 // Request interceptor
@@ -228,15 +228,24 @@ export const ApiService = {
       temperature = 0.3,
       onChunk = () => {},
       onComplete = () => {},
-      onError = () => {}
+      onError = () => {},
+      timeout = 120000 // 2 minutes timeout for streaming
     } = options;
 
     try {
       loggingService.logInfo('Starting streaming response', {
         prompt: prompt.substring(0, 100) + '...',
         maxTokens,
-        temperature
+        temperature,
+        timeout
       });
+
+      // Create AbortController for timeout handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        controller.abort();
+        loggingService.logError('streaming_timeout', 'Request timeout exceeded', { timeout });
+      }, timeout);
 
       const response = await fetch(`${API_BASE_URL}/api/stream-response`, {
         method: 'POST',
@@ -248,8 +257,11 @@ export const ApiService = {
           system_prompt: systemPrompt,
           max_tokens: maxTokens,
           temperature: temperature
-        })
+        }),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorMsg = `HTTP error! status: ${response.status}`;
@@ -265,63 +277,104 @@ export const ApiService = {
       let buffer = '';
       let chunkCount = 0;
       let totalLength = 0;
+      let lastChunkTime = Date.now();
 
-      while (true) {
-        const { done, value } = await reader.read();
-        
-        if (done) break;
+      // Connection health monitoring
+      const connectionTimeout = 30000; // 30 seconds between chunks
+      let connectionTimeoutId;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        
-        // Keep the last incomplete line in the buffer
-        buffer = lines.pop() || '';
+      const resetConnectionTimeout = () => {
+        if (connectionTimeoutId) {
+          clearTimeout(connectionTimeoutId);
+        }
+        connectionTimeoutId = setTimeout(() => {
+          loggingService.logError('streaming_connection_timeout', 'No data received for 30 seconds');
+          onError(new Error('Connection timeout - no data received'));
+        }, connectionTimeout);
+      };
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              
-              if (data.error) {
-                loggingService.logError('streaming_data_error', data.error, {
-                  chunkCount,
-                  totalLength
+      resetConnectionTimeout();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            clearTimeout(connectionTimeoutId);
+            break;
+          }
+
+          lastChunkTime = Date.now();
+          resetConnectionTimeout();
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          
+          // Keep the last incomplete line in the buffer
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                
+                if (data.error) {
+                  clearTimeout(connectionTimeoutId);
+                  loggingService.logError('streaming_data_error', data.error, {
+                    chunkCount,
+                    totalLength
+                  });
+                  onError(new Error(data.error));
+                  return;
+                }
+                
+                if (data.done) {
+                  clearTimeout(connectionTimeoutId);
+                  loggingService.logInfo('Streaming completed successfully', {
+                    chunkCount,
+                    totalLength,
+                    duration: Date.now() - (lastChunkTime - (chunkCount * 100)) // Approximate duration
+                  });
+                  onComplete();
+                  return;
+                }
+                
+                if (data.chunk) {
+                  chunkCount++;
+                  totalLength += data.chunk.length;
+                  onChunk(data.chunk);
+                }
+              } catch (parseError) {
+                console.warn('Failed to parse streaming data:', parseError);
+                loggingService.logWarning('Failed to parse streaming data', {
+                  parseError: parseError.message,
+                  line: line.substring(0, 100) + '...'
                 });
-                onError(new Error(data.error));
-                return;
               }
-              
-              if (data.done) {
-                loggingService.logInfo('Streaming completed successfully', {
-                  chunkCount,
-                  totalLength
-                });
-                onComplete();
-                return;
-              }
-              
-              if (data.chunk) {
-                chunkCount++;
-                totalLength += data.chunk.length;
-                onChunk(data.chunk);
-              }
-            } catch (parseError) {
-              console.warn('Failed to parse streaming data:', parseError);
-              loggingService.logWarning('Failed to parse streaming data', {
-                parseError: parseError.message,
-                line: line
-              });
             }
           }
         }
+      } finally {
+        if (connectionTimeoutId) {
+          clearTimeout(connectionTimeoutId);
+        }
       }
     } catch (error) {
-      console.error('Error in streaming response:', error);
-      loggingService.logError('streaming_response', error.message, {
-        prompt: prompt.substring(0, 100) + '...',
-        error: error.toString()
-      });
-      onError(error);
+      if (error.name === 'AbortError') {
+        const timeoutError = new Error('Request timeout - please try again');
+        loggingService.logError('streaming_timeout', timeoutError.message, {
+          prompt: prompt.substring(0, 100) + '...',
+          timeout
+        });
+        onError(timeoutError);
+      } else {
+        console.error('Error in streaming response:', error);
+        loggingService.logError('streaming_response', error.message, {
+          prompt: prompt.substring(0, 100) + '...',
+          error: error.toString()
+        });
+        onError(error);
+      }
       throw error;
     }
   },

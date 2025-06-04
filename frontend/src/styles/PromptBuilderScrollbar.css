@@ -1,0 +1,245 @@
+/**
+ * PromptBuilderScrollbar.css
+ * Custom scrollbar styles for the PromptBuilder component
+ * 
+ * Features:
+ * - Cross-browser compatible scrollbar styling
+ * - Consistent with Vibe Assistant theme
+ * - Smooth scrolling behavior
+ * - Auto-scroll visual indicators
+ */
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+.prompt-builder-scrollable::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.prompt-builder-scrollable::-webkit-scrollbar-track {
+  background: var(--vibe-darker, #252526);
+  border-radius: 6px;
+  border: 1px solid var(--vibe-gray-dark, #3c3c3c);
+}
+
+.prompt-builder-scrollable::-webkit-scrollbar-thumb {
+  background: var(--vibe-blue, #007acc);
+  border-radius: 6px;
+  border: 2px solid var(--vibe-darker, #252526);
+  transition: background-color 0.2s ease;
+}
+
+.prompt-builder-scrollable::-webkit-scrollbar-thumb:hover {
+  background: #0099ff;
+}
+
+.prompt-builder-scrollable::-webkit-scrollbar-thumb:active {
+  background: #0066cc;
+}
+
+.prompt-builder-scrollable::-webkit-scrollbar-corner {
+  background: var(--vibe-darker, #252526);
+}
+
+/* Firefox */
+.prompt-builder-scrollable {
+  scrollbar-width: thin;
+  scrollbar-color: var(--vibe-blue, #007acc) var(--vibe-darker, #252526);
+}
+
+/* Auto-scroll indicator styles */
+.auto-scroll-indicator {
+  position: relative;
+}
+
+.auto-scroll-indicator::after {
+  content: '';
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 20px;
+  background: var(--vibe-green, #4caf50);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.auto-scroll-indicator.auto-scroll-active::after {
+  opacity: 1;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Smooth scrolling behavior */
+.prompt-builder-scrollable {
+  scroll-behavior: smooth;
+}
+
+/* Enhanced response box scrollbar */
+.enhanced-response-scrollable::-webkit-scrollbar {
+  width: 8px;
+}
+
+.enhanced-response-scrollable::-webkit-scrollbar-track {
+  background: var(--vibe-dark, #1e1e1e);
+  border-radius: 4px;
+}
+
+.enhanced-response-scrollable::-webkit-scrollbar-thumb {
+  background: var(--vibe-gray-dark, #3c3c3c);
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.enhanced-response-scrollable::-webkit-scrollbar-thumb:hover {
+  background: var(--vibe-blue, #007acc);
+}
+
+/* Auto-scroll status indicator */
+.auto-scroll-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.auto-scroll-status.enabled {
+  background: rgba(76, 175, 80, 0.2);
+  color: var(--vibe-green, #4caf50);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+}
+
+.auto-scroll-status.disabled {
+  background: rgba(244, 67, 54, 0.2);
+  color: var(--vibe-red, #f44336);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
+.auto-scroll-status.paused {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.3);
+}
+
+/* Auto-scroll toggle button */
+.auto-scroll-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  border: 1px solid var(--vibe-gray-dark, #3c3c3c);
+  border-radius: 4px;
+  background: var(--vibe-darker, #252526);
+  color: var(--vibe-gray, #cccccc);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.auto-scroll-toggle:hover {
+  background: var(--vibe-blue, #007acc);
+  border-color: var(--vibe-blue, #007acc);
+  color: white;
+}
+
+.auto-scroll-toggle.active {
+  background: var(--vibe-green, #4caf50);
+  border-color: var(--vibe-green, #4caf50);
+  color: white;
+}
+
+/* Streaming content indicator */
+.streaming-indicator {
+  position: relative;
+  overflow: hidden;
+}
+
+.streaming-indicator::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--vibe-blue, #007acc),
+    transparent
+  );
+  animation: streaming 2s infinite;
+}
+
+@keyframes streaming {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .prompt-builder-scrollable::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .auto-scroll-toggle {
+    font-size: 0.7rem;
+    padding: 3px 6px;
+  }
+  
+  .auto-scroll-status {
+    font-size: 0.7rem;
+    padding: 1px 4px;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .prompt-builder-scrollable::-webkit-scrollbar-thumb {
+    background: #ffffff;
+    border: 1px solid #000000;
+  }
+  
+  .auto-scroll-status.enabled {
+    background: #00ff00;
+    color: #000000;
+  }
+  
+  .auto-scroll-status.disabled {
+    background: #ff0000;
+    color: #ffffff;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .prompt-builder-scrollable {
+    scroll-behavior: auto;
+  }
+  
+  .auto-scroll-indicator::after,
+  .streaming-indicator::before {
+    animation: none;
+  }
+  
+  .auto-scroll-toggle,
+  .auto-scroll-status {
+    transition: none;
+  }
+} 

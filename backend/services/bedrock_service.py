@@ -89,63 +89,111 @@ class BedrockService:
         prompt: str, 
         system_prompt: str = None,
         max_tokens: int = 4000,
-        temperature: float = 0.3
+        temperature: float = 0.3,
+        timeout: int = 120  # 2 minutes timeout
     ) -> Generator[str, None, None]:
         """
-        Invoke Claude model with streaming response.
+        Invoke Claude model with streaming response and enhanced timeout handling.
         
         Args:
             prompt: The user prompt
             system_prompt: Optional system prompt
             max_tokens: Maximum tokens to generate
             temperature: Temperature for response generation
+            timeout: Timeout in seconds for the streaming request
             
         Yields:
             Streaming response chunks
         """
+        import time
+        import threading
+        
         try:
             if not self.client:
                 raise Exception("Bedrock client not initialized")
             
-            # Build request body
-            request_body = {
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            }
+            start_time = time.time()
+            logger.info(f"Starting streaming request with {timeout}s timeout")
             
-            # Add system prompt if provided
-            if system_prompt:
-                request_body["system"] = system_prompt
+            # Thread-safe timeout tracking
+            timeout_occurred = threading.Event()
             
-            # Invoke with streaming
-            response = self.client.invoke_model_with_response_stream(
-                modelId=self.model_id,
-                body=json.dumps(request_body),
-                contentType='application/json'
-            )
+            def timeout_handler():
+                timeout_occurred.set()
             
-            # Process streaming response
-            for event in response["body"]:
-                chunk = event.get("chunk")
-                if chunk:
-                    chunk_data = json.loads(chunk.get("bytes").decode())
+            # Set up timeout timer (thread-safe alternative to signal.alarm)
+            timeout_timer = threading.Timer(timeout, timeout_handler)
+            timeout_timer.start()
+            
+            try:
+                # Build request body
+                request_body = {
+                    "anthropic_version": "bedrock-2023-05-31",
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ]
+                }
+                
+                # Add system prompt if provided
+                if system_prompt:
+                    request_body["system"] = system_prompt
+                
+                # Invoke with streaming
+                response = self.client.invoke_model_with_response_stream(
+                    modelId=self.model_id,
+                    body=json.dumps(request_body),
+                    contentType='application/json'
+                )
+                
+                chunk_count = 0
+                last_chunk_time = time.time()
+                
+                # Process streaming response with enhanced monitoring
+                for event in response["body"]:
+                    # Check for timeout
+                    if timeout_occurred.is_set():
+                        raise TimeoutError(f"Streaming request timed out after {timeout} seconds")
                     
-                    # Handle different chunk types
-                    if chunk_data.get("type") == "content_block_delta":
-                        delta = chunk_data.get("delta", {})
-                        if "text" in delta:
-                            yield delta["text"]
-                    elif chunk_data.get("type") == "message_delta":
-                        # Handle message completion
-                        pass
+                    current_time = time.time()
+                    
+                    # Check for overall timeout
+                    if current_time - start_time > timeout:
+                        raise TimeoutError(f"Streaming request timed out after {timeout} seconds")
+                    
+                    # Check for chunk timeout (30 seconds between chunks)
+                    if current_time - last_chunk_time > 30:
+                        logger.warning("Long delay between chunks detected")
+                    
+                    chunk = event.get("chunk")
+                    if chunk:
+                        chunk_data = json.loads(chunk.get("bytes").decode())
                         
+                        # Handle different chunk types
+                        if chunk_data.get("type") == "content_block_delta":
+                            delta = chunk_data.get("delta", {})
+                            if "text" in delta:
+                                chunk_count += 1
+                                last_chunk_time = current_time
+                                yield delta["text"]
+                        elif chunk_data.get("type") == "message_delta":
+                            # Handle message completion
+                            pass
+                        elif chunk_data.get("type") == "message_stop":
+                            # Stream completed successfully
+                            logger.info(f"Streaming completed successfully in {current_time - start_time:.2f}s with {chunk_count} chunks")
+                            break
+            finally:
+                # Clean up timeout timer
+                timeout_timer.cancel()
+                        
+        except TimeoutError as e:
+            logger.error(f"Streaming timeout: {str(e)}")
+            raise
         except Exception as e:
             logger.error(f"Error in streaming Claude model: {str(e)}")
             raise

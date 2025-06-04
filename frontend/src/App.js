@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ApiService } from './services/ApiService';
+import ApiService from './services/ApiService';
 import Sidebar from './components/Sidebar';
 import PromptBuilder from './components/PromptBuilder';
 import RequirementsEditor from './components/RequirementsEditor';

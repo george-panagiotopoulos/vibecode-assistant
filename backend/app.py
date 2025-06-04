@@ -526,7 +526,7 @@ def enhance_prompt_with_architecture():
 
 @app.route('/api/stream-response', methods=['POST'])
 def stream_response():
-    """Stream responses from AWS Bedrock"""
+    """Stream responses from AWS Bedrock with enhanced timeout handling"""
     try:
         data = request.get_json()
         
@@ -537,8 +537,9 @@ def stream_response():
         system_prompt = data.get('system_prompt', None)
         max_tokens = data.get('max_tokens', 4000)
         temperature = data.get('temperature', 0.3)
+        timeout = data.get('timeout', 120)  # Default 2 minutes
         
-        logger.info(f"Processing streaming request: {user_prompt[:100]}...")
+        logger.info(f"Processing streaming request: {user_prompt[:100]}... (timeout: {timeout}s)")
         
         # Log the streaming request
         logging_service.log_api_request(
@@ -546,7 +547,8 @@ def stream_response():
             request_data={
                 'prompt': user_prompt,
                 'max_tokens': max_tokens,
-                'temperature': temperature
+                'temperature': temperature,
+                'timeout': timeout
             }
         )
         
@@ -569,7 +571,8 @@ def stream_response():
                     prompt=user_prompt,
                     system_prompt=system_prompt,
                     max_tokens=max_tokens,
-                    temperature=temperature
+                    temperature=temperature,
+                    timeout=timeout
                 ):
                     # Collect chunk for logging
                     response_chunks.append(chunk)
@@ -584,17 +587,31 @@ def stream_response():
                     metadata={
                         'max_tokens': max_tokens,
                         'temperature': temperature,
-                        'system_prompt': system_prompt is not None
+                        'timeout': timeout,
+                        'system_prompt': system_prompt is not None,
+                        'total_chunks': len(response_chunks)
                     }
                 )
                 
                 # Send completion signal
                 yield f"data: {json.dumps({'done': True})}\n\n"
                 
+            except TimeoutError as e:
+                error_msg = f"Request timeout: {str(e)}"
+                logger.error(error_msg)
+                logging_service.log_error("streaming_timeout", error_msg, {
+                    'prompt': user_prompt[:100],
+                    'timeout': timeout,
+                    'chunks_received': len(response_chunks)
+                })
+                yield f"data: {json.dumps({'error': 'Request timeout - please try again'})}\n\n"
             except Exception as e:
                 error_msg = f"Error in streaming: {str(e)}"
                 logger.error(error_msg)
-                logging_service.log_error("streaming", error_msg, {'prompt': user_prompt[:100]})
+                logging_service.log_error("streaming", error_msg, {
+                    'prompt': user_prompt[:100],
+                    'chunks_received': len(response_chunks)
+                })
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
         
         return Response(
@@ -604,7 +621,8 @@ def stream_response():
                 'Cache-Control': 'no-cache',
                 'Connection': 'keep-alive',
                 'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Content-Type'
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'X-Accel-Buffering': 'no'  # Disable nginx buffering for real-time streaming
             }
         )
         
