@@ -534,8 +534,15 @@ const Dashboard = ({ config, onConfigUpdate }) => {
               </h3>
               <div className="flex flex-wrap gap-3">
                 <button
-                  onClick={() => window.open('http://localhost:7474', '_blank')}
+                  onClick={() => {
+                    // Use current host for Neo4j browser URL in cloud environments
+                    const neo4jUrl = window.location.hostname === 'localhost' 
+                      ? 'http://localhost:7474' 
+                      : `http://${window.location.hostname}:7474`;
+                    window.open(neo4jUrl, '_blank');
+                  }}
                   className="btn-standard"
+                  title="Open Neo4j Browser"
                 >
                   🗄️ Open Neo4j Browser
                 </button>
@@ -765,7 +772,7 @@ const Dashboard = ({ config, onConfigUpdate }) => {
                     value={configData.neo4j?.uri || ''}
                     onChange={(e) => updateConfig('neo4j', 'uri', e.target.value)}
                     className="input-primary w-full"
-                    placeholder="bolt://localhost:7687"
+                    placeholder="bolt://your-neo4j-host:7687"
                   />
                 </div>
 
@@ -799,7 +806,19 @@ const Dashboard = ({ config, onConfigUpdate }) => {
               <div className="mt-4 p-4 bg-vibe-darker rounded-lg">
                 <h4 className="text-sm font-medium text-vibe-gray mb-2">Database Information</h4>
                 <div className="text-xs text-vibe-gray opacity-75 space-y-1">
-                  <p>• Neo4j Browser: <a href="http://localhost:7474" target="_blank" rel="noopener noreferrer" className="text-vibe-blue hover:underline">http://localhost:7474</a></p>
+                  <p>• Neo4j Browser: <a 
+                    href="#" 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      const neo4jUrl = window.location.hostname === 'localhost' 
+                        ? 'http://localhost:7474' 
+                        : `http://${window.location.hostname}:7474`;
+                      window.open(neo4jUrl, '_blank');
+                    }}
+                    className="text-vibe-blue hover:underline"
+                  >
+                    Neo4j Browser (port 7474)
+                  </a></p>
                   <p>• Default credentials: neo4j / vibeassistant</p>
                   <p>• Used for hierarchical software planning and requirements management</p>
                 </div>

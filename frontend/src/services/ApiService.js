@@ -1,7 +1,26 @@
 import axios from 'axios';
 import loggingService from './LoggingService';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+// API Base URL configuration
+// - In development with proxy: use empty string (relative URLs)
+// - In production or when REACT_APP_API_URL is set: use the specified URL
+// - Fallback for local development without proxy: http://localhost:5000
+const getApiBaseUrl = () => {
+  // If REACT_APP_API_URL is explicitly set, use it
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // In development mode with proxy, use relative URLs
+  if (process.env.NODE_ENV === 'development') {
+    return '';
+  }
+  
+  // Fallback for production builds without explicit API URL
+  return '';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000, // Increased timeout to 60 seconds for LLM calls to handle longer responses
