@@ -37,6 +37,11 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
   // NEW: Ref for dynamic response box sizing (NFR 10: Performance optimization)
   const responseBoxRef = useRef(null);
 
+  // Custom instructions modal state
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [customInstructions, setCustomInstructions] = useState('');
+  const [customInstructionsError, setCustomInstructionsError] = useState('');
+
   // Enhanced auto-scroll integration with performance optimization
   useEffect(() => {
     if (responseBoxRef.current) {
@@ -115,7 +120,9 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
       // Debounced resize calculation for better performance
       const timeoutId = setTimeout(() => {
         const lineHeight = 20; // Approximate line height in pixels
-        const lines = enhancedSpecification.split('\n').length;
+        // Ensure enhancedSpecification is a string before calling split
+        const specText = typeof enhancedSpecification === 'string' ? enhancedSpecification : String(enhancedSpecification || '');
+        const lines = specText.split('\n').length;
         const padding = 32; // Account for padding
         
         // More responsive height calculation
@@ -131,13 +138,13 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
         // Handle auto-scroll during streaming with improved logic
         if (isStreaming && uiState.autoScrollEnabled) {
           // Let AutoScrollService handle scrolling automatically
-          autoScrollService.onContentUpdate('response-box', enhancedSpecification);
+          autoScrollService.onContentUpdate('response-box', specText);
           
           loggingService.logInfo('Dynamic sizing applied with auto-scroll', {
             calculatedHeight,
             lines,
             isStreaming,
-            contentLength: enhancedSpecification.length
+            contentLength: specText.length
           });
         }
       }, 100); // Debounce for performance
@@ -416,15 +423,11 @@ Focus on making the user's intent crystal clear while presenting the NFRs and ar
       case 'full_specification':
         return 'Full Specification';
       case 'enhanced_prompt':
-        return 'Enhanced Prompt';
+        return 'Enhanced Implementation Plan';
       case 'rephrase':
-        return 'Rephrase';
-      case 'maximum_detail':
-        return 'Full Specification'; // Legacy support
-      case 'balanced':
-        return 'Enhanced Prompt'; // Legacy support
-      case 'key_requirements':
-        return 'Rephrase'; // Legacy support
+        return 'Rephrased Prompt';
+      case 'custom':
+        return 'Custom Instructions';
       default:
         return 'Enhanced Specification';
     }
@@ -453,6 +456,147 @@ Focus on making the user's intent crystal clear while presenting the NFRs and ar
 
   const removeArchLayer = (layerName) => {
     setSelectedArchLayers(prev => prev.filter(layer => layer.name !== layerName));
+  };
+
+  // Custom instructions handlers
+  const openCustomModal = () => {
+    setShowCustomModal(true);
+    setCustomInstructionsError('');
+  };
+
+  const closeCustomModal = () => {
+    setShowCustomModal(false);
+    setCustomInstructions('');
+    setCustomInstructionsError('');
+  };
+
+  const handleCustomInstructionsSubmit = async () => {
+    if (!customInstructions.trim()) {
+      setCustomInstructionsError('Custom instructions cannot be empty');
+      return;
+    }
+
+    if (customInstructions.length > 2000) {
+      setCustomInstructionsError('Custom instructions must be 2000 characters or less');
+      return;
+    }
+
+    try {
+      setShowCustomModal(false);
+      await enhancePromptWithCustomInstructions(customInstructions);
+    } catch (error) {
+      setCustomInstructionsError(`Failed to process custom instructions: ${error.message}`);
+    }
+  };
+
+  const enhancePromptWithCustomInstructions = async (instructions) => {
+    if (!prompt.trim()) {
+      setEnhancedSpecification('');
+      return;
+    }
+
+    setIsEnhancing(true);
+    setIsStreaming(false); // Custom instructions use regular API, not streaming
+    setEnhancedSpecification('');
+    setCurrentEnhancementType('custom');
+    
+    loggingService.logInfo('Starting custom enhancement in PromptBuilder', {
+      promptLength: prompt.length,
+      selectedFilesCount: selectedFiles.length,
+      customInstructionsLength: instructions.length,
+      nfrCount: selectedNFRs.length,
+      archLayerCount: selectedArchLayers.length,
+      considerArchitecture
+    });
+
+    try {
+      // Prepare requirements for the API - consistent with other buttons
+      const requirements = selectedNFRs.map(nfr => `${nfr.name}: ${nfr.description}`);
+      
+      // For custom instructions, we need to use the architecture-enhanced endpoint
+      // if architecture is enabled, otherwise use the regular endpoint
+      let result;
+      
+      if (considerArchitecture && selectedArchLayers.length > 0) {
+        // Use architecture-enhanced endpoint for consistency with other buttons
+        result = await ApiService.enhancePromptWithArchitecture(prompt, {
+          selectedFiles: selectedFiles,
+          architectureLayers: selectedArchLayers,
+          requirements: requirements,
+          enhancementType: 'custom',
+          considerArchitecture: considerArchitecture,
+          customInstructions: instructions
+        });
+      } else {
+        // Use regular endpoint but with proper data structure
+        result = await ApiService.enhancePrompt(
+          prompt,
+          'custom',
+          selectedFiles,
+          instructions
+        );
+      }
+
+      // Handle different response formats from the API
+      let enhancedText = '';
+      
+      if (result.enhanced_specification) {
+        // Handle nested response structure
+        if (typeof result.enhanced_specification === 'object' && result.enhanced_specification.enhanced_prompt) {
+          enhancedText = String(result.enhanced_specification.enhanced_prompt || '');
+        } else {
+          enhancedText = String(result.enhanced_specification || '');
+        }
+      } else if (result.enhanced_prompt) {
+        // Handle direct enhanced_prompt field
+        enhancedText = String(result.enhanced_prompt || '');
+      } else {
+        // Fallback to the entire result if it's a string
+        enhancedText = typeof result === 'string' ? result : String(result || '');
+      }
+
+      if (enhancedText.trim()) {
+        setEnhancedSpecification(enhancedText);
+        
+        // Set metadata for custom enhancement - consistent with other buttons
+        setEnhancementMetadata({
+          enhancement_type: 'custom',
+          requirements_count: selectedNFRs.length,
+          architecture_layers_count: selectedArchLayers.length,
+          selected_files_count: selectedFiles.length,
+          model_used: 'Claude (Custom Instructions)',
+          architecture_enhanced: considerArchitecture && selectedArchLayers.length > 0,
+          custom_instructions_length: instructions.length,
+          custom_instructions_used: true,
+          nfr_requirements_included: selectedNFRs.length > 0,
+          architecture_context_included: considerArchitecture && selectedArchLayers.length > 0,
+          ...(result.metadata || {})
+        });
+
+        loggingService.logInfo('Custom enhancement completed successfully', {
+          enhancedTextLength: enhancedText.length,
+          hasMetadata: !!result.metadata,
+          nfrIncluded: selectedNFRs.length > 0,
+          archIncluded: considerArchitecture && selectedArchLayers.length > 0
+        });
+      } else {
+        throw new Error('No enhanced specification received from API');
+      }
+
+    } catch (error) {
+      const errorMsg = `Custom enhancement failed: ${error.message || 'Unknown error'}`;
+      setEnhancedSpecification(errorMsg);
+      loggingService.logError('custom_enhancement_error', error.message || 'Unknown error', {
+        prompt: prompt.substring(0, 100) + '...',
+        selectedFilesCount: selectedFiles.length,
+        customInstructionsLength: instructions.length,
+        nfrCount: selectedNFRs.length,
+        archLayerCount: selectedArchLayers.length,
+        considerArchitecture
+      });
+    } finally {
+      setIsEnhancing(false);
+    }
   };
 
   /**
@@ -821,6 +965,18 @@ Focus on making the user's intent crystal clear while presenting the NFRs and ar
               }
             </button>
             <button
+              onClick={openCustomModal}
+              disabled={!prompt.trim() || isEnhancing}
+              className={`btn-standard disabled:opacity-50 flex-1 sm:flex-none ${considerArchitecture && selectedArchLayers.length > 0 ? 'ring-2 ring-vibe-blue ring-opacity-50' : ''}`}
+              title={`Use custom prompt building instructions${considerArchitecture && selectedArchLayers.length > 0 ? ' with architecture integration' : ''}`}
+              aria-label="Use custom instructions"
+            >
+              {isEnhancing && currentEnhancementType === 'custom' ? 
+                (isStreaming ? '🔄 Streaming...' : '🔄 Processing...') : 
+                `🎯 Custom${considerArchitecture && selectedArchLayers.length > 0 ? ' 🏗️' : ''}`
+              }
+            </button>
+            <button
               onClick={() => {
                 setPrompt('');
                 setEnhancedSpecification('');
@@ -918,7 +1074,7 @@ Focus on making the user's intent crystal clear while presenting the NFRs and ar
                       <span className="hidden sm:inline">Model: {enhancementMetadata.model_used || 'Claude'}</span>
                     </>
                   )}
-                  <span>{enhancedSpecification.length} chars</span>
+                  <span>{typeof enhancedSpecification === 'string' ? enhancedSpecification.length : String(enhancedSpecification || '').length} chars</span>
                   {isStreaming && <span className="text-vibe-blue animate-pulse">● Streaming</span>}
                 </div>
               </div>
@@ -958,7 +1114,7 @@ Focus on making the user's intent crystal clear while presenting the NFRs and ar
                   resize: uiState.dynamicSizing ? 'vertical' : 'none'
                 }}
               >
-                {enhancedSpecification || (
+                {typeof enhancedSpecification === 'string' ? enhancedSpecification : String(enhancedSpecification || '') || (
                   <span className="text-vibe-gray opacity-50 italic">
                     {isStreaming ? 'Generating response...' : 'Enhanced specification will appear here...'}
                   </span>
@@ -974,7 +1130,7 @@ Focus on making the user's intent crystal clear while presenting the NFRs and ar
                   {uiState.autoExpandResponse && (
                     <span className="flex items-center space-x-1">
                       <span>📏</span>
-                      <span>Auto-expanding ({enhancedSpecification.split('\n').length} lines)</span>
+                      <span>Auto-expanding ({typeof enhancedSpecification === 'string' ? enhancedSpecification.split('\n').length : String(enhancedSpecification || '').split('\n').length} lines)</span>
                     </span>
                   )}
                   {uiState.autoScrollEnabled && (
@@ -988,7 +1144,7 @@ Focus on making the user's intent crystal clear while presenting the NFRs and ar
                   {isStreaming && uiState.autoScrollEnabled && (
                     <span className="text-vibe-blue animate-pulse">Manual scroll pauses auto-scroll</span>
                   )}
-                  <span>{enhancedSpecification.length} chars</span>
+                  <span>{typeof enhancedSpecification === 'string' ? enhancedSpecification.length : String(enhancedSpecification || '').length} chars</span>
                 </span>
               </div>
             )}
@@ -1009,6 +1165,60 @@ Focus on making the user's intent crystal clear while presenting the NFRs and ar
         onClose={() => setArchLoaderOpen(false)}
         onLayersSelected={handleArchLayerSelection}
       />
+
+      {/* Custom Instructions Modal */}
+      {showCustomModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-vibe-darker p-6 rounded-lg border border-vibe-gray-dark w-full max-w-2xl mx-4">
+            <h3 className="text-lg font-medium text-vibe-gray mb-4">Custom Prompt Instructions</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-vibe-gray mb-2">
+                  Custom Instructions
+                </label>
+                <textarea
+                  value={customInstructions}
+                  onChange={(e) => setCustomInstructions(e.target.value)}
+                  className="input-primary w-full h-32 resize-none"
+                  placeholder="Enter your custom prompt building instructions here. For example: 'Create a detailed technical specification with emphasis on security requirements and include specific implementation steps for each component.'"
+                  maxLength={2000}
+                />
+                <div className="flex justify-between items-center mt-2">
+                  <span className="text-xs text-vibe-gray opacity-60">
+                    Provide specific instructions for how you want the AI to process your prompt
+                  </span>
+                  <span className={`text-xs ${customInstructions.length > 1800 ? 'text-vibe-red' : 'text-vibe-gray opacity-60'}`}>
+                    {customInstructions.length}/2000
+                  </span>
+                </div>
+              </div>
+
+              {customInstructionsError && (
+                <div className="bg-vibe-red bg-opacity-20 border border-vibe-red text-vibe-red p-3 rounded text-sm">
+                  {customInstructionsError}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-vibe-gray-dark">
+                <button
+                  onClick={closeCustomModal}
+                  className="btn-standard"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCustomInstructionsSubmit}
+                  disabled={!customInstructions.trim() || customInstructions.length > 2000}
+                  className="btn-add disabled:opacity-50"
+                >
+                  Submit Instructions
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

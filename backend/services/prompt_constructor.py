@@ -23,7 +23,8 @@ class PromptConstructor:
         nfr_requirements: List[str] = None, 
         file_context: List[Dict] = None,
         application_architecture: Dict = None,
-        enhancement_type: str = 'enhanced_prompt'
+        enhancement_type: str = 'enhanced_prompt',
+        custom_instructions: str = None
     ) -> Dict[str, Any]:
         """
         Construct a comprehensive LLM prompt that transforms user input into a detailed
@@ -35,6 +36,7 @@ class PromptConstructor:
             file_context: Selected files and their context
             application_architecture: Application architecture data when "Considered Application Architecture" is enabled
             enhancement_type: Type of enhancement (full_specification, enhanced_prompt, rephrase)
+            custom_instructions: Custom instructions that override default configuration
             
         Returns:
             Dict containing the constructed prompt and metadata
@@ -46,8 +48,12 @@ class PromptConstructor:
             # Map legacy enhancement types to new ones
             mapped_enhancement_type = self._map_enhancement_type(enhancement_type)
             
-            # Generate dynamic system prompt based on the specific task
-            system_prompt = self._generate_dynamic_system_prompt(user_input, mapped_enhancement_type, application_architecture)
+            # Generate system prompt - use custom instructions if provided
+            if custom_instructions:
+                system_prompt = custom_instructions
+                mapped_enhancement_type = 'custom'
+            else:
+                system_prompt = self._generate_dynamic_system_prompt(user_input, mapped_enhancement_type, application_architecture)
             
             # Construct the main prompt
             main_prompt = self._build_main_prompt(
@@ -57,11 +63,13 @@ class PromptConstructor:
                 application_architecture
             )
             
-            # Add enhancement instructions based on type
-            enhancement_instructions = self._build_enhancement_instructions(mapped_enhancement_type)
-            
-            # Combine all parts
-            final_prompt = f"{main_prompt}\n\n{enhancement_instructions}"
+            # Add enhancement instructions based on type (skip for custom instructions)
+            if not custom_instructions:
+                enhancement_instructions = self._build_enhancement_instructions(mapped_enhancement_type)
+                final_prompt = f"{main_prompt}\n\n{enhancement_instructions}"
+            else:
+                # For custom instructions, just use the main prompt
+                final_prompt = main_prompt
             
             # Calculate architecture layers count safely
             if isinstance(application_architecture, dict):
@@ -80,6 +88,7 @@ class PromptConstructor:
                 'file_count': len(file_context) if file_context else 0,
                 'architecture_enabled': bool(application_architecture),
                 'architecture_layers': arch_layers_count,
+                'custom_instructions_used': bool(custom_instructions),
                 'timestamp': datetime.now().isoformat(),
                 'metadata': {
                     'nfr_count': len(nfr_requirements) if nfr_requirements else 0,
@@ -87,6 +96,7 @@ class PromptConstructor:
                     'architecture_enabled': bool(application_architecture),
                     'architecture_layers': arch_layers_count,
                     'enhancement_type': mapped_enhancement_type,
+                    'custom_instructions_used': bool(custom_instructions),
                     'timestamp': datetime.now().isoformat()
                 }
             }

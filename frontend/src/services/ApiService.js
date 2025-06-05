@@ -138,23 +138,32 @@ export const ApiService = {
     return response.data;
   },
 
-  // Enhanced prompt operation - Updated to remove task_type and focus on enhancement_type
-  async enhancePrompt(prompt, enhancementType = 'enhanced_prompt', selectedFiles = []) {
+  // Enhanced prompt operation - Updated to support custom instructions
+  async enhancePrompt(prompt, enhancementType = 'enhanced_prompt', selectedFiles = [], customInstructions = null) {
     try {
       loggingService.logInfo('Starting prompt enhancement', {
         prompt: prompt.substring(0, 100) + '...',
         enhancementType,
-        selectedFilesCount: selectedFiles.length
+        selectedFilesCount: selectedFiles.length,
+        hasCustomInstructions: !!customInstructions
       });
 
-      const response = await api.post('/api/enhance-prompt', {
+      const requestData = {
         prompt,
         enhancement_type: enhancementType,
         selected_files: selectedFiles
-      });
+      };
+
+      // Add custom instructions if provided
+      if (customInstructions) {
+        requestData.custom_instructions = customInstructions;
+      }
+
+      const response = await api.post('/api/enhance-prompt', requestData);
 
       loggingService.logInfo('Prompt enhancement successful', {
-        responseLength: response.data.enhanced_specification?.length || 0
+        responseLength: response.data.enhanced_specification?.length || 0,
+        customInstructionsUsed: response.data.metadata?.custom_instructions_used || false
       });
 
       return response.data;
@@ -164,6 +173,7 @@ export const ApiService = {
         prompt: prompt.substring(0, 100) + '...',
         enhancementType,
         selectedFilesCount: selectedFiles.length,
+        hasCustomInstructions: !!customInstructions,
         error: error.toString()
       });
       throw error;
@@ -177,7 +187,8 @@ export const ApiService = {
       architectureLayers = [],
       requirements = [],
       enhancementType = 'enhanced_prompt',
-      considerArchitecture = false
+      considerArchitecture = false,
+      customInstructions = null
     } = options;
 
     try {
@@ -187,23 +198,32 @@ export const ApiService = {
         selectedFilesCount: selectedFiles.length,
         architectureLayersCount: architectureLayers.length,
         requirementsCount: requirements.length,
-        considerArchitecture
+        considerArchitecture,
+        hasCustomInstructions: !!customInstructions
       });
 
-      const response = await api.post('/api/enhance-prompt-with-architecture', {
+      const requestData = {
         prompt,
         selected_files: selectedFiles,
         architecture_layers: considerArchitecture ? architectureLayers : [],
         requirements,
         enhancement_type: enhancementType,
         consider_architecture: considerArchitecture
-      });
+      };
+
+      // Add custom instructions if provided
+      if (customInstructions) {
+        requestData.custom_instructions = customInstructions;
+      }
+
+      const response = await api.post('/api/enhance-prompt-with-architecture', requestData);
 
       loggingService.logInfo('Architecture-enhanced prompt building successful', {
         responseLength: response.data.enhanced_prompt?.length || 0,
         complexityLevel: response.data.complexity_analysis?.estimated_complexity || 'unknown',
         architectureLayersProcessed: response.data.metadata?.architecture_layers_count || 0,
-        totalComponents: response.data.metadata?.total_components || 0
+        totalComponents: response.data.metadata?.total_components || 0,
+        customInstructionsUsed: response.data.metadata?.custom_instructions_used || false
       });
 
       return response.data;
@@ -214,6 +234,7 @@ export const ApiService = {
         enhancementType,
         selectedFilesCount: selectedFiles.length,
         architectureLayersCount: architectureLayers.length,
+        hasCustomInstructions: !!customInstructions,
         error: error.toString()
       });
       throw error;

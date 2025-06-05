@@ -307,7 +307,7 @@ def handle_requirements():
 
 @app.route('/api/enhance-prompt', methods=['POST'])
 def enhance_prompt():
-    """Enhanced prompt endpoint with real Bedrock integration - Updated to remove task_type dependency"""
+    """Enhanced prompt endpoint with real Bedrock integration - Updated to support custom instructions"""
     try:
         data = request.get_json()
         
@@ -318,8 +318,32 @@ def enhance_prompt():
         selected_files = data.get('selected_files', [])
         enhancement_type = data.get('enhancement_type', 'enhanced_prompt')
         nfr_requirements = data.get('requirements', [])
+        custom_instructions = data.get('custom_instructions', None)
         
-        logger.info(f"Processing enhance-prompt request: {user_prompt[:100]}... (type: {enhancement_type})")
+        # Validate and sanitize custom instructions if provided
+        if custom_instructions:
+            # Basic validation
+            if not isinstance(custom_instructions, str):
+                return jsonify({'error': 'Custom instructions must be a string'}), 400
+            
+            # Length validation
+            if len(custom_instructions) > 2000:
+                return jsonify({'error': 'Custom instructions must be 2000 characters or less'}), 400
+            
+            # Basic sanitization - remove potentially harmful content
+            import re
+            # Remove script tags and other potentially harmful content
+            custom_instructions = re.sub(r'<script[^>]*>.*?</script>', '', custom_instructions, flags=re.IGNORECASE | re.DOTALL)
+            custom_instructions = re.sub(r'javascript:', '', custom_instructions, flags=re.IGNORECASE)
+            custom_instructions = custom_instructions.strip()
+            
+            if not custom_instructions:
+                return jsonify({'error': 'Custom instructions cannot be empty after sanitization'}), 400
+            
+            # Override enhancement type for custom instructions
+            enhancement_type = 'custom'
+        
+        logger.info(f"Processing enhance-prompt request: {user_prompt[:100]}... (type: {enhancement_type}, custom: {bool(custom_instructions)})")
         
         # Log the API request
         logging_service.log_api_request(
@@ -328,7 +352,8 @@ def enhance_prompt():
                 'prompt': user_prompt,
                 'enhancement_type': enhancement_type,
                 'selected_files_count': len(selected_files),
-                'requirements_count': len(nfr_requirements)
+                'requirements_count': len(nfr_requirements),
+                'has_custom_instructions': bool(custom_instructions)
             }
         )
         
@@ -346,7 +371,8 @@ def enhance_prompt():
                 nfr_requirements=nfr_requirements,
                 file_context=selected_files,
                 application_architecture=None,  # No architecture for basic enhancement
-                enhancement_type=enhancement_type
+                enhancement_type=enhancement_type,
+                custom_instructions=custom_instructions  # Pass custom instructions
             )
             
             logger.info(f"Successfully enhanced prompt with enhancement_type: {enhancement_type}")
@@ -357,7 +383,8 @@ def enhance_prompt():
                 request_data={
                     'prompt': user_prompt,
                     'enhancement_type': enhancement_type,
-                    'selected_files_count': len(selected_files)
+                    'selected_files_count': len(selected_files),
+                    'has_custom_instructions': bool(custom_instructions)
                 },
                 response_data={
                     'success': True,
@@ -373,7 +400,9 @@ def enhance_prompt():
                 'metadata': {
                     'requirements_count': len(nfr_requirements),
                     'selected_files_count': len(selected_files),
-                    'architecture_enhanced': False
+                    'architecture_enhanced': False,
+                    'custom_instructions_used': bool(custom_instructions),
+                    'custom_instructions_length': len(custom_instructions) if custom_instructions else 0
                 },
                 'logs': [
                     {
@@ -405,7 +434,7 @@ def enhance_prompt():
 
 @app.route('/api/enhance-prompt-with-architecture', methods=['POST'])
 def enhance_prompt_with_architecture():
-    """Enhanced prompt endpoint with application architecture integration - Updated to remove task_type dependency"""
+    """Enhanced prompt endpoint with application architecture integration - Updated to support custom instructions"""
     try:
         data = request.get_json()
         
@@ -418,8 +447,32 @@ def enhance_prompt_with_architecture():
         requirements = data.get('requirements', [])
         enhancement_type = data.get('enhancement_type', 'enhanced_prompt')
         consider_architecture = data.get('consider_architecture', False)
+        custom_instructions = data.get('custom_instructions', None)
         
-        logger.info(f"Processing architecture-enhanced prompt: {user_prompt[:100]}... (type: {enhancement_type}, arch: {consider_architecture})")
+        # Validate and sanitize custom instructions if provided
+        if custom_instructions:
+            # Basic validation
+            if not isinstance(custom_instructions, str):
+                return jsonify({'error': 'Custom instructions must be a string'}), 400
+            
+            # Length validation
+            if len(custom_instructions) > 2000:
+                return jsonify({'error': 'Custom instructions must be 2000 characters or less'}), 400
+            
+            # Basic sanitization - remove potentially harmful content
+            import re
+            # Remove script tags and other potentially harmful content
+            custom_instructions = re.sub(r'<script[^>]*>.*?</script>', '', custom_instructions, flags=re.IGNORECASE | re.DOTALL)
+            custom_instructions = re.sub(r'javascript:', '', custom_instructions, flags=re.IGNORECASE)
+            custom_instructions = custom_instructions.strip()
+            
+            if not custom_instructions:
+                return jsonify({'error': 'Custom instructions cannot be empty after sanitization'}), 400
+            
+            # Override enhancement type for custom instructions
+            enhancement_type = 'custom'
+        
+        logger.info(f"Processing architecture-enhanced prompt: {user_prompt[:100]}... (type: {enhancement_type}, arch: {consider_architecture}, custom: {bool(custom_instructions)})")
         
         # Log the API request
         logging_service.log_api_request(
@@ -430,7 +483,8 @@ def enhance_prompt_with_architecture():
                 'selected_files_count': len(selected_files),
                 'architecture_layers_count': len(architecture_layers),
                 'requirements_count': len(requirements),
-                'consider_architecture': consider_architecture
+                'consider_architecture': consider_architecture,
+                'has_custom_instructions': bool(custom_instructions)
             }
         )
         
@@ -464,7 +518,8 @@ def enhance_prompt_with_architecture():
                 file_context=selected_files,
                 application_architecture=application_architecture,
                 enhancement_type=enhancement_type,
-                return_string_only=True  # Return only the string response
+                return_string_only=True,  # Return only the string response
+                custom_instructions=custom_instructions  # Pass custom instructions
             )
             
             # Analyze prompt complexity including architecture
@@ -485,7 +540,8 @@ def enhance_prompt_with_architecture():
                     'prompt': user_prompt,
                     'enhancement_type': enhancement_type,
                     'architecture_layers_count': len(architecture_layers),
-                    'consider_architecture': consider_architecture
+                    'consider_architecture': consider_architecture,
+                    'has_custom_instructions': bool(custom_instructions)
                 },
                 response_data={
                     'success': True,
@@ -507,7 +563,9 @@ def enhance_prompt_with_architecture():
                     'selected_files_count': len(selected_files),
                     'total_components': sum(layer.get('nodeCount', 0) for layer in architecture_layers) if consider_architecture else 0,
                     'neo4j_available': integration_status.get('neo4j_available', False),
-                    'architecture_enhanced': consider_architecture and len(architecture_layers) > 0
+                    'architecture_enhanced': consider_architecture and len(architecture_layers) > 0,
+                    'custom_instructions_used': bool(custom_instructions),
+                    'custom_instructions_length': len(custom_instructions) if custom_instructions else 0
                 },
                 'success': True
             })

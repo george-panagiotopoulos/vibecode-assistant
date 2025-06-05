@@ -21,11 +21,13 @@ class PromptService:
         file_context: List[Dict] = None,
         application_architecture: Dict = None,
         enhancement_type: str = 'enhanced_prompt',
-        return_string_only: bool = False
+        return_string_only: bool = False,
+        custom_instructions: str = None
     ) -> Union[Dict[str, Any], str]:
         """
         Enhanced prompt building with LLM integration.
         Now actually calls the LLM to generate enhanced responses.
+        Supports custom instructions that override default configuration.
         """
         try:
             # Use PromptConstructor to build the comprehensive prompt
@@ -34,7 +36,8 @@ class PromptService:
                 nfr_requirements=nfr_requirements,
                 file_context=file_context,
                 application_architecture=application_architecture,
-                enhancement_type=enhancement_type
+                enhancement_type=enhancement_type,
+                custom_instructions=custom_instructions
             )
             
             # Get the enhanced response from LLM
@@ -50,6 +53,7 @@ class PromptService:
                 'enhancement_type': enhancement_type,
                 'metadata': constructed_prompt.get('metadata', {}),
                 'system_prompt': constructed_prompt.get('system_prompt', ''),
+                'custom_instructions_used': bool(custom_instructions),
                 'success': True
             }
             
@@ -64,6 +68,7 @@ class PromptService:
                 'enhanced_prompt': error_response,
                 'original_input': user_prompt,
                 'enhancement_type': enhancement_type,
+                'custom_instructions_used': bool(custom_instructions),
                 'error': str(e),
                 'success': False
             }
