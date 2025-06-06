@@ -1,17 +1,20 @@
 #!/bin/bash
 
 # Simple Cloud Setup for Vibe Assistant
-# Run this ONCE after creating your .env file
+# Run this ONCE after creating your .env file in the project root
 
 set -e
 
 echo "🌩️  Vibe Assistant Cloud Setup"
 echo "=============================="
 
-# Check if .env exists
+# Go to project root
+cd "$(dirname "$0")/.."
+
+# Check if .env exists in project root
 if [[ ! -f ".env" ]]; then
-    echo "❌ .env file not found!"
-    echo "Create a .env file first with your AWS and GitHub credentials"
+    echo "❌ .env file not found in project root!"
+    echo "Create a .env file in the project root with your AWS and GitHub credentials"
     exit 1
 fi
 
@@ -36,6 +39,16 @@ echo "✅ Cleaned .env file"
 echo "🔍 Detecting VM IP..."
 VM_IP=$(curl -s ifconfig.me 2>/dev/null || curl -s ipinfo.io/ip 2>/dev/null || echo "localhost")
 echo "✅ VM IP: $VM_IP"
+
+# Add all cloud config to the single .env file
+echo "⚙️  Adding cloud configuration to .env..."
+echo "" >> .env
+echo "# Cloud Configuration - Added by cloud-setup.sh" >> .env
+echo "HOST=0.0.0.0" >> .env
+echo "PORT=5000" >> .env
+echo "REACT_APP_API_URL=http://$VM_IP:5000" >> .env
+echo "GENERATE_SOURCEMAP=false" >> .env
+echo "BROWSER=none" >> .env
 
 # Fix frontend package.json (remove proxy)
 echo "🔧 Fixing frontend package.json..."
@@ -75,23 +88,6 @@ cat > frontend/package.json << 'EOF'
 }
 EOF
 
-# Create frontend .env
-echo "🌐 Creating frontend .env..."
-cat > frontend/.env << EOF
-REACT_APP_API_URL=http://$VM_IP:5000
-GENERATE_SOURCEMAP=false
-BROWSER=none
-HOST=0.0.0.0
-PORT=3000
-EOF
-
-# Add cloud config to main .env
-echo "⚙️  Updating main .env..."
-echo "" >> .env
-echo "# Cloud Configuration" >> .env
-echo "HOST=0.0.0.0" >> .env
-echo "PORT=5000" >> .env
-
 # Create Docker Compose for Neo4j
 echo "📊 Setting up Neo4j..."
 mkdir -p database
@@ -118,11 +114,17 @@ echo "📦 Installing dependencies..."
 cd backend && pip3 install -r requirements.txt && cd ..
 cd frontend && npm install && cd ..
 
-# Create simple start script
-echo "🚀 Creating start script..."
-cat > scripts/start-cloud.sh << 'EOF'
+# Update the existing start script
+echo "🚀 Updating start script..."
+cat > scripts/start-cloud.sh << EOF
 #!/bin/bash
 set -e
+
+# Go to project root
+cd "\$(dirname "\$0")/.."
+
+# Load environment variables
+source .env
 
 echo "🚀 Starting Vibe Assistant..."
 
@@ -132,28 +134,21 @@ sleep 10
 
 # Start Backend
 cd backend
-export HOST=0.0.0.0
-export PORT=5000
 nohup python3 app.py > ../logs/backend.log 2>&1 &
 cd ..
 sleep 5
 
 # Start Frontend
 cd frontend
-export HOST=0.0.0.0
-export PORT=3000
-export BROWSER=none
 nohup npm start > ../logs/frontend.log 2>&1 &
 cd ..
 
 echo "✅ Services started!"
-echo "🌐 Frontend: http://VM_IP:3000"
-echo "🔧 Backend: http://VM_IP:5000"
-echo "📊 Neo4j: http://VM_IP:7474"
+echo "🌐 Frontend: http://$VM_IP:3000"
+echo "🔧 Backend: http://$VM_IP:5000"
+echo "📊 Neo4j: http://$VM_IP:7474"
 EOF
 
-# Replace VM_IP placeholder in start script
-sed -i "s/VM_IP/$VM_IP/g" scripts/start-cloud.sh
 chmod +x scripts/start-cloud.sh
 
 # Create logs directory
