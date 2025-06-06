@@ -34,6 +34,10 @@ pkill -f "python.*app.py" 2>/dev/null || true
 pkill -f "react-scripts" 2>/dev/null || true
 pkill -f "node.*react-scripts" 2>/dev/null || true
 
+# Get VM IP
+VM_IP=$(curl -s http://checkip.amazonaws.com/ || curl -s http://ipinfo.io/ip || curl -s http://icanhazip.com/)
+echo "🌐 VM IP detected: $VM_IP"
+
 # Start Neo4j and wait for it
 echo "📊 Starting Neo4j..."
 cd database && docker-compose up -d && cd ..
@@ -71,13 +75,14 @@ for i in {1..30}; do
     sleep 2
 done
 
-# Start Frontend
+# Start Frontend with correct API URL
 echo "🌐 Starting frontend..."
 cd frontend
 export HOST=0.0.0.0
 export PORT=3000
 export BROWSER=none
 export GENERATE_SOURCEMAP=false
+export REACT_APP_API_URL=http://$VM_IP:5000
 nohup npm start > ../logs/frontend.log 2>&1 &
 FRONTEND_PID=$!
 cd ..
@@ -95,9 +100,9 @@ done
 
 echo ""
 echo "✅ All services started successfully!"
-echo "🌐 Frontend: http://3.235.20.192:3000"
-echo "🔧 Backend: http://3.235.20.192:5000"
-echo "📊 Neo4j: http://3.235.20.192:7474"
+echo "🌐 Frontend: http://$VM_IP:3000"
+echo "🔧 Backend: http://$VM_IP:5000"
+echo "📊 Neo4j: http://$VM_IP:7474"
 echo ""
 echo "📋 Process IDs:"
 echo "   Backend PID: $BACKEND_PID"
