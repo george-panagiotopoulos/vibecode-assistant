@@ -116,12 +116,29 @@ cd frontend && npm install && cd ..
 
 # Update the existing start script
 echo "🚀 Updating start script..."
-cat > scripts/start-cloud.sh << EOF
+cat > scripts/start-cloud.sh << 'EOF'
 #!/bin/bash
 set -e
 
 # Go to project root
-cd "\$(dirname "\$0")/.."
+cd "$(dirname "$0")/.."
+
+# Clean .env file before loading (same as setup script)
+if [[ -f ".env" ]]; then
+    cp .env .env.backup.start
+    {
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            # Skip empty lines
+            [[ -z "$line" ]] && continue
+            # Keep comment lines
+            [[ "$line" =~ ^[[:space:]]*# ]] && echo "$line" && continue
+            # Keep valid environment variables only
+            if [[ "$line" =~ ^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*= ]]; then
+                echo "$line"
+            fi
+        done < .env.backup.start
+    } > .env
+fi
 
 # Load environment variables
 source .env
