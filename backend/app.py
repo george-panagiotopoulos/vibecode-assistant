@@ -1498,7 +1498,7 @@ def internal_error(error):
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    host = os.environ.get('HOST', '0.0.0.0')
+    host = os.environ.get('HOST', 'localhost')
     debug = os.environ.get('FLASK_DEBUG', 'True').lower() == 'true'
     
     app.run(debug=debug, host=host, port=port) 
