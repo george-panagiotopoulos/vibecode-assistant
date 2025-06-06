@@ -49,9 +49,13 @@ for i in {1..30}; do
     sleep 2
 done
 
-# Start Backend
+# Start Backend with explicit host binding
 echo "🔧 Starting backend..."
 cd backend
+export HOST=0.0.0.0
+export PORT=5000
+export FLASK_RUN_HOST=0.0.0.0
+export FLASK_RUN_PORT=5000
 nohup python3 app.py > ../logs/backend.log 2>&1 &
 BACKEND_PID=$!
 cd ..
@@ -70,6 +74,10 @@ done
 # Start Frontend
 echo "🌐 Starting frontend..."
 cd frontend
+export HOST=0.0.0.0
+export PORT=3000
+export BROWSER=none
+export GENERATE_SOURCEMAP=false
 nohup npm start > ../logs/frontend.log 2>&1 &
 FRONTEND_PID=$!
 cd ..
