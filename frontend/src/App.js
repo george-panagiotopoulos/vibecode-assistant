@@ -4,7 +4,6 @@ import Sidebar from './components/Sidebar';
 import PromptBuilder from './components/PromptBuilder';
 import RequirementsEditor from './components/RequirementsEditor';
 import StatusBar from './components/StatusBar';
-import StreamingTest from './components/StreamingTest';
 import Dashboard from './components/Dashboard';
 import FileViewer from './components/FileViewer';
 
@@ -158,12 +157,6 @@ const App = () => {
           return (
             <RequirementsEditor
               selectedFiles={selectedFiles}
-              config={config}
-            />
-          );
-        case 'streaming':
-          return (
-            <StreamingTest
               config={config}
             />
           );

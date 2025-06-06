@@ -4,6 +4,7 @@ import os
 import logging
 import json
 from datetime import datetime
+import time
 
 # RADICAL FIX: Force environment loading FIRST
 from config.env_loader import env_loader
@@ -599,7 +600,7 @@ def stream_response():
         
         logger.info(f"Processing streaming request: {user_prompt[:100]}... (timeout: {timeout}s)")
         
-        # Log the streaming request
+        # Log the streaming request (within request context)
         logging_service.log_api_request(
             endpoint='/api/stream-response',
             request_data={
@@ -620,11 +621,21 @@ def stream_response():
             logging_service.log_error("bedrock_connection", error_msg)
             return jsonify({'error': 'AI service temporarily unavailable'}), 503
         
-        # Collect chunks for logging
+        # Collect chunks and metadata for logging (outside generator context)
         response_chunks = []
+        streaming_metadata = {
+            'max_tokens': max_tokens,
+            'temperature': temperature,
+            'timeout': timeout,
+            'system_prompt': system_prompt is not None,
+            'start_time': time.time()
+        }
         
         def generate():
+            nonlocal response_chunks, streaming_metadata
+            
             try:
+                chunk_count = 0
                 for chunk in bedrock_service.invoke_claude_streaming(
                     prompt=user_prompt,
                     system_prompt=system_prompt,
@@ -634,22 +645,18 @@ def stream_response():
                 ):
                     # Collect chunk for logging
                     response_chunks.append(chunk)
+                    chunk_count += 1
                     
                     # Send each chunk as Server-Sent Events
                     yield f"data: {json.dumps({'chunk': chunk})}\n\n"
                 
-                # Log the complete streaming response
-                logging_service.log_streaming_response(
-                    prompt=user_prompt,
-                    response_chunks=response_chunks,
-                    metadata={
-                        'max_tokens': max_tokens,
-                        'temperature': temperature,
-                        'timeout': timeout,
-                        'system_prompt': system_prompt is not None,
-                        'total_chunks': len(response_chunks)
-                    }
-                )
+                # Update metadata
+                streaming_metadata.update({
+                    'total_chunks': len(response_chunks),
+                    'end_time': time.time(),
+                    'duration': time.time() - streaming_metadata['start_time'],
+                    'success': True
+                })
                 
                 # Send completion signal
                 yield f"data: {json.dumps({'done': True})}\n\n"
@@ -657,22 +664,35 @@ def stream_response():
             except TimeoutError as e:
                 error_msg = f"Request timeout: {str(e)}"
                 logger.error(error_msg)
-                logging_service.log_error("streaming_timeout", error_msg, {
-                    'prompt': user_prompt[:100],
-                    'timeout': timeout,
-                    'chunks_received': len(response_chunks)
+                
+                # Update metadata for timeout
+                streaming_metadata.update({
+                    'total_chunks': len(response_chunks),
+                    'end_time': time.time(),
+                    'duration': time.time() - streaming_metadata['start_time'],
+                    'success': False,
+                    'error': 'timeout'
                 })
+                
                 yield f"data: {json.dumps({'error': 'Request timeout - please try again'})}\n\n"
+                
             except Exception as e:
                 error_msg = f"Error in streaming: {str(e)}"
                 logger.error(error_msg)
-                logging_service.log_error("streaming", error_msg, {
-                    'prompt': user_prompt[:100],
-                    'chunks_received': len(response_chunks)
+                
+                # Update metadata for error
+                streaming_metadata.update({
+                    'total_chunks': len(response_chunks),
+                    'end_time': time.time(),
+                    'duration': time.time() - streaming_metadata['start_time'],
+                    'success': False,
+                    'error': str(e)
                 })
+                
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
         
-        return Response(
+        # Create the response with proper headers
+        response = Response(
             generate(),
             mimetype='text/plain',
             headers={
@@ -683,6 +703,22 @@ def stream_response():
                 'X-Accel-Buffering': 'no'  # Disable nginx buffering for real-time streaming
             }
         )
+        
+        # Log the streaming response after the generator completes
+        # This is done via a callback that runs after the response is sent
+        @response.call_on_close
+        def log_streaming_completion():
+            try:
+                # Log the complete streaming response (context-safe)
+                logging_service.log_streaming_response(
+                    prompt=user_prompt,
+                    response_chunks=response_chunks,
+                    metadata=streaming_metadata
+                )
+            except Exception as e:
+                logger.error(f"Failed to log streaming completion: {str(e)}")
+        
+        return response
         
     except Exception as e:
         error_msg = f"Error in stream-response endpoint: {str(e)}"

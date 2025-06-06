@@ -223,7 +223,7 @@ const Sidebar = ({
                 : 'text-vibe-gray hover:bg-vibe-gray-dark hover:text-white'
             }`}
           >
-            🏗️ Hierarchical Planning
+            📋 Requirements
           </button>
 
           <button
@@ -235,17 +235,6 @@ const Sidebar = ({
             }`}
           >
             📊 Dashboard & Configuration
-          </button>
-          
-          <button
-            onClick={() => onViewChange('streaming')}
-            className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-              activeView === 'streaming' 
-                ? 'bg-vibe-blue text-white' 
-                : 'text-vibe-gray hover:bg-vibe-gray-dark hover:text-white'
-            }`}
-          >
-            🔄 Streaming Test
           </button>
         </nav>
       </div>
