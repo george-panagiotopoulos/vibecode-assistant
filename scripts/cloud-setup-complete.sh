@@ -111,8 +111,49 @@ validate_env_file() {
         exit 1
     fi
     
-    # Load environment variables
-    source "$ENV_FILE"
+    # Clean and validate .env file
+    log_info "Cleaning .env file..."
+    
+    # Backup the original .env
+    cp "$ENV_FILE" "$ENV_FILE.backup.$(date +%Y%m%d_%H%M%S)"
+    
+    # Clean the .env file - remove problematic lines and fix formatting
+    {
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            # Skip empty lines
+            [[ -z "$line" ]] && continue
+            
+            # Skip comment lines that start with #
+            [[ "$line" =~ ^[[:space:]]*# ]] && echo "$line" && continue
+            
+            # Skip lines that don't look like environment variables
+            if [[ "$line" =~ ^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*= ]]; then
+                # This looks like a valid env var, clean it up
+                cleaned_line=$(echo "$line" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+                echo "$cleaned_line"
+            else
+                # Skip invalid lines but log them
+                log_warning "Skipping invalid line: $line"
+            fi
+        done < "$ENV_FILE"
+    } > "$ENV_FILE.tmp"
+    
+    mv "$ENV_FILE.tmp" "$ENV_FILE"
+    
+    log_success "Cleaned .env file"
+    
+    # Now safely load environment variables
+    set -a  # automatically export all variables
+    source "$ENV_FILE" 2>/dev/null || {
+        log_error "Failed to load .env file after cleaning"
+        echo "Please check your .env file format. Each line should be:"
+        echo "VARIABLE_NAME=value"
+        echo
+        echo "Current .env file contents:"
+        cat -n "$ENV_FILE"
+        exit 1
+    }
+    set +a  # stop auto-exporting
     
     # Validate required variables
     if [[ -z "$AWS_ACCESS_KEY_ID" || -z "$AWS_SECRET_ACCESS_KEY" ]]; then
