@@ -15,6 +15,23 @@ if [[ ! -f ".env" ]]; then
     exit 1
 fi
 
+# Clean .env file first
+echo "🧹 Cleaning .env file..."
+cp .env .env.backup
+{
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip empty lines
+        [[ -z "$line" ]] && continue
+        # Keep comment lines
+        [[ "$line" =~ ^[[:space:]]*# ]] && echo "$line" && continue
+        # Keep valid environment variables only
+        if [[ "$line" =~ ^[[:space:]]*[A-Za-z_][A-Za-z0-9_]*[[:space:]]*= ]]; then
+            echo "$line"
+        fi
+    done < .env.backup
+} > .env
+echo "✅ Cleaned .env file"
+
 # Get VM IP
 echo "🔍 Detecting VM IP..."
 VM_IP=$(curl -s ifconfig.me 2>/dev/null || curl -s ipinfo.io/ip 2>/dev/null || echo "localhost")
