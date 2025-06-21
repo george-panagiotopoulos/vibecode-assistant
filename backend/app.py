@@ -593,26 +593,28 @@ def stream_response():
             return jsonify({'error': 'Prompt is required'}), 400
         
         user_prompt = data['prompt']
-        system_prompt = data.get('system_prompt', None)
+        enhancement_type = data.get('enhancement_type', 'enhanced_prompt')
         max_tokens = data.get('max_tokens', 4000)
         temperature = data.get('temperature', 0.3)
         timeout = data.get('timeout', 120)  # Default 2 minutes
         
-        logger.info(f"Processing streaming request: {user_prompt[:100]}... (timeout: {timeout}s)")
+        logger.info(f"Processing streaming request: {user_prompt[:100]}... (enhancement_type: {enhancement_type}, timeout: {timeout}s)")
         
         # Log the streaming request (within request context)
         logging_service.log_api_request(
             endpoint='/api/stream-response',
             request_data={
                 'prompt': user_prompt,
+                'enhancement_type': enhancement_type,
                 'max_tokens': max_tokens,
                 'temperature': temperature,
                 'timeout': timeout
             }
         )
         
-        # Initialize Bedrock service
+        # Initialize services
         bedrock_service = BedrockService()
+        prompt_service = PromptService(bedrock_service)
         
         # Test connection first
         if not bedrock_service.test_connection():
@@ -621,13 +623,25 @@ def stream_response():
             logging_service.log_error("bedrock_connection", error_msg)
             return jsonify({'error': 'AI service temporarily unavailable'}), 503
         
+        # Generate system prompt from configuration using PromptService
+        try:
+            constructed_prompt = prompt_service.prompt_constructor.construct_enhanced_prompt(
+                user_input=user_prompt,
+                enhancement_type=enhancement_type
+            )
+            system_prompt = constructed_prompt.get('system_prompt', '')
+        except Exception as e:
+            logger.warning(f"Failed to construct system prompt: {str(e)}, using default")
+            system_prompt = prompt_service.prompt_config.get_system_prompt('default')
+        
         # Collect chunks and metadata for logging (outside generator context)
         response_chunks = []
         streaming_metadata = {
             'max_tokens': max_tokens,
             'temperature': temperature,
             'timeout': timeout,
-            'system_prompt': system_prompt is not None,
+            'enhancement_type': enhancement_type,
+            'system_prompt_generated': bool(system_prompt),
             'start_time': time.time()
         }
         

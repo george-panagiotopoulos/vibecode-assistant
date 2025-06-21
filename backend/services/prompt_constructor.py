@@ -41,21 +41,22 @@ class PromptConstructor:
         Returns:
             Dict containing the constructed prompt and metadata
         """
-        if not self._validate_inputs(user_input):
-            raise ValueError("Invalid input: user_input is required and must be non-empty")
-        
         try:
-            # Map legacy enhancement types to new ones
+            # Validate inputs
+            if not self._validate_inputs(user_input):
+                raise ValueError("Invalid user input provided")
+            
+            # Map enhancement type for backward compatibility
             mapped_enhancement_type = self._map_enhancement_type(enhancement_type)
             
-            # Generate system prompt - use custom instructions if provided
-            if custom_instructions:
-                system_prompt = custom_instructions
-                mapped_enhancement_type = 'custom'
-            else:
-                system_prompt = self._generate_dynamic_system_prompt(user_input, mapped_enhancement_type, application_architecture)
+            # Generate dynamic system prompt
+            system_prompt = self._generate_dynamic_system_prompt(
+                user_input, 
+                mapped_enhancement_type, 
+                application_architecture
+            )
             
-            # Construct the main prompt
+            # Build main prompt with all context
             main_prompt = self._build_main_prompt(
                 user_input, 
                 nfr_requirements, 
@@ -63,12 +64,11 @@ class PromptConstructor:
                 application_architecture
             )
             
-            # Add enhancement instructions based on type (skip for custom instructions)
-            if not custom_instructions:
-                enhancement_instructions = self._build_enhancement_instructions(mapped_enhancement_type)
-                final_prompt = f"{main_prompt}\n\n{enhancement_instructions}"
+            # For custom instructions, append them to the main prompt
+            if custom_instructions:
+                final_prompt = f"{main_prompt}\n\n## CUSTOM INSTRUCTIONS\n{custom_instructions}"
             else:
-                # For custom instructions, just use the main prompt
+                # Use the main prompt as-is - system prompt handles all enhancement logic
                 final_prompt = main_prompt
             
             # Calculate architecture layers count safely
@@ -312,10 +312,6 @@ class PromptConstructor:
         except Exception as e:
             logger.error(f"Error formatting architecture context: {str(e)}")
             return "Architecture context available but could not be processed."
-    
-    def _build_enhancement_instructions(self, enhancement_type: str = 'enhanced_prompt') -> str:
-        """Build specific instructions for how the LLM should enhance the prompt based on enhancement type."""
-        return self.prompt_config.format_enhancement_instructions(enhancement_type, "")
     
     def _map_enhancement_type(self, enhancement_type: str) -> str:
         """Map legacy enhancement types to new ones for backward compatibility"""

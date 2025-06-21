@@ -244,7 +244,7 @@ export const ApiService = {
   // Streaming response operation
   async streamResponse(prompt, options = {}) {
     const {
-      systemPrompt = null,
+      enhancementType = 'enhanced_prompt',
       maxTokens = 4000,
       temperature = 0.3,
       onChunk = () => {},
@@ -256,6 +256,7 @@ export const ApiService = {
     try {
       loggingService.logInfo('Starting streaming response', {
         prompt: prompt.substring(0, 100) + '...',
+        enhancementType,
         maxTokens,
         temperature,
         timeout
@@ -275,9 +276,10 @@ export const ApiService = {
         },
         body: JSON.stringify({
           prompt,
-          system_prompt: systemPrompt,
+          enhancement_type: enhancementType,
           max_tokens: maxTokens,
-          temperature: temperature
+          temperature: temperature,
+          timeout: timeout / 1000 // Convert to seconds for backend
         }),
         signal: controller.signal
       });
@@ -285,7 +287,8 @@ export const ApiService = {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorMsg = `HTTP error! status: ${response.status}`;
+        const errorData = await response.json().catch(() => ({}));
+        const errorMsg = errorData.error || `HTTP error! status: ${response.status}`;
         loggingService.logError('streaming_http_error', errorMsg, {
           status: response.status,
           statusText: response.statusText
@@ -293,6 +296,7 @@ export const ApiService = {
         throw new Error(errorMsg);
       }
 
+      // Handle streaming response (Server-Sent Events)
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
@@ -397,11 +401,11 @@ export const ApiService = {
         console.error('Error in streaming response:', error);
         loggingService.logError('streaming_response', error.message, {
           prompt: prompt.substring(0, 100) + '...',
+          enhancementType,
           error: error.toString()
         });
         onError(error);
       }
-      throw error;
     }
   },
 

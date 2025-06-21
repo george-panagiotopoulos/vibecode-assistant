@@ -219,37 +219,6 @@ const PromptBuilder = ({ selectedFiles, onPromptEnhancement, config }) => {
     });
   };
 
-  const getSystemPrompt = (enhancementType) => {
-    switch (enhancementType) {
-      case 'maximum_detail':
-        return `You are an expert AI coding assistant. Create a comprehensive step-by-step implementation guide for the user's request. The guide must contain between 15-25 detailed steps that cover all aspects of the development task. Each step should be specific, actionable, and include technical details. 
-
-CRITICAL REQUIREMENT: For each step in your plan, you must provide detailed instructions on how to satisfy the most relevant non-functional requirements from the provided list. Explicitly reference which NFRs apply to each step and provide specific implementation guidance to meet those requirements.
-
-${considerArchitecture && selectedArchLayers.length > 0 ? 
-  'ARCHITECTURE CONSIDERATION: When planning the implementation, consider the provided application architecture layers and ensure your steps align with the architectural components and their relationships. Reference specific architectural layers where relevant.' : ''}
-
-Consider all inputs including non-functional requirements, application architecture layers, selected files, and project context. Structure your response as a numbered list with clear, detailed explanations for each step, ensuring NFR compliance and architectural alignment are addressed throughout the implementation.`;
-      case 'balanced':
-        return `You are an expert AI coding assistant. Create a balanced step-by-step implementation plan for the user's request. The plan should contain approximately 10 steps that cover the key aspects of the development task. Each step should be clear, actionable, and focused on the most important implementation details. 
-
-${considerArchitecture && selectedArchLayers.length > 0 ? 
-  'Consider the provided application architecture layers when planning the implementation steps.' : ''}
-
-Consider all inputs including non-functional requirements, application architecture layers, selected files, and project context. Structure your response as a numbered list.`;
-      case 'key_requirements':
-        return `You are an expert AI coding assistant. Your task is to:
-1. Rephrase the user's requirement with enhanced clarity and precision
-2. Provide a condensed, comma-separated list of the selected non-functional requirements
-${considerArchitecture && selectedArchLayers.length > 0 ? 
-  '3. Summarize the relevant application architecture layers and their key components' : ''}
-
-Focus on making the user's intent crystal clear while presenting the NFRs and architecture context in a concise, easily digestible format. Do not provide implementation steps - only clarify what needs to be built and what constraints must be satisfied.`;
-      default:
-        return `You are an expert AI coding assistant. Transform the user's request into a comprehensive Business Requirements Specification for development projects.`;
-    }
-  };
-
   const enhancePrompt = async (enhancementType) => {
     if (!prompt.trim()) {
       setEnhancedSpecification('');
@@ -271,8 +240,6 @@ Focus on making the user's intent crystal clear while presenting the NFRs and ar
     });
 
     try {
-      const systemPrompt = getSystemPrompt(enhancementType);
-      
       // Set token limits based on enhancement type
       let maxTokens;
       switch (enhancementType) {
@@ -317,30 +284,9 @@ Focus on making the user's intent crystal clear while presenting the NFRs and ar
         enhancedPrompt += filesSection;
       }
       
-      // Add specific instructions based on enhancement type
-      if (enhancementType === 'full_specification') {
-        enhancedPrompt += '\n\nPlease provide a comprehensive specification with detailed implementation steps. For each step, include specific instructions on how to satisfy the most relevant non-functional requirements from the list provided.';
-        if (considerArchitecture && selectedArchLayers.length > 0) {
-          enhancedPrompt += ' Also ensure each step considers the relevant application architecture layers and their components.';
-        }
-      } else if (enhancementType === 'enhanced_prompt') {
-        enhancedPrompt += '\n\nPlease provide an enhanced version of this prompt with additional context and clarity.';
-        if (considerArchitecture && selectedArchLayers.length > 0) {
-          enhancedPrompt += ' Consider the application architecture layers when enhancing the prompt.';
-        }
-      } else if (enhancementType === 'rephrase') {
-        enhancedPrompt += '\n\nPlease rephrase this requirement with enhanced clarity and precision.';
-        if (selectedNFRs.length > 0) {
-          enhancedPrompt += ' Also provide a condensed summary of the selected non-functional requirements.';
-        }
-        if (considerArchitecture && selectedArchLayers.length > 0) {
-          enhancedPrompt += ' Also summarize the relevant application architecture layers and their key components.';
-        }
-      }
-      
-      // ALWAYS use streaming for the response to ensure consistent behavior
+      // Use streaming for the response - backend handles system prompt via prompt_config.json
       await ApiService.streamResponse(enhancedPrompt, {
-        systemPrompt,
+        enhancementType, // Let backend determine system prompt from config
         maxTokens,
         temperature: 0.3,
         timeout: 120000, // 2 minutes timeout
