@@ -1,0 +1,320 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  NODE_VERSION: '18'
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.changes.outputs.frontend }}
+      backend: ${{ steps.changes.outputs.backend }}
+      docs: ${{ steps.changes.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - 'package.json'
+            backend:
+              - 'backend/**'
+              - 'requirements.txt'
+            docs:
+              - '**.md'
+              - 'docs/**'
+
+  frontend-test:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run frontend linting
+        run: |
+          cd frontend
+          npm run lint
+
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm run test -- --coverage --watchAll=false
+
+      - name: Upload frontend coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./frontend/coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+
+      - name: Archive frontend build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: frontend/build/
+
+  backend-test:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'backend/requirements.txt'
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install pytest pytest-cov flake8 black isort mypy
+
+      - name: Run backend linting with flake8
+        run: |
+          cd backend
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Check backend code formatting with black
+        run: |
+          cd backend
+          black --check .
+
+      - name: Check backend import sorting with isort
+        run: |
+          cd backend
+          isort --check-only .
+
+      - name: Run backend type checking with mypy
+        run: |
+          cd backend
+          mypy . --ignore-missing-imports
+
+      - name: Run backend tests
+        run: |
+          cd backend
+          pytest --cov=. --cov-report=xml --cov-report=term-missing
+
+      - name: Upload backend coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./backend/coverage.xml
+          flags: backend
+          name: backend-coverage
+
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  docker-build:
+    needs: [frontend-test, backend-test]
+    if: always() && (needs.frontend-test.result == 'success' || needs.frontend-test.result == 'skipped') && (needs.backend-test.result == 'success' || needs.backend-test.result == 'skipped')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: vibe-assistant:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  e2e-tests:
+    needs: [frontend-test, backend-test]
+    if: always() && (needs.frontend-test.result == 'success' || needs.frontend-test.result == 'skipped') && (needs.backend-test.result == 'success' || needs.backend-test.result == 'skipped')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: 'backend/requirements.txt'
+
+      - name: Install dependencies
+        run: |
+          cd frontend && npm ci
+          cd ../backend && pip install -r requirements.txt
+
+      - name: Install Playwright
+        run: |
+          cd frontend
+          npx playwright install --with-deps
+
+      - name: Start application
+        run: |
+          # Start backend
+          cd backend
+          python app.py &
+          BACKEND_PID=$!
+          
+          # Start frontend
+          cd ../frontend
+          npm start &
+          FRONTEND_PID=$!
+          
+          # Wait for services to be ready
+          sleep 30
+          
+          # Save PIDs for cleanup
+          echo $BACKEND_PID > ../backend.pid
+          echo $FRONTEND_PID > ../frontend.pid
+
+      - name: Run E2E tests
+        run: |
+          cd frontend
+          npx playwright test
+
+      - name: Upload E2E test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: e2e-test-results
+          path: frontend/test-results/
+
+      - name: Cleanup processes
+        if: always()
+        run: |
+          if [ -f backend.pid ]; then
+            kill $(cat backend.pid) || true
+          fi
+          if [ -f frontend.pid ]; then
+            kill $(cat frontend.pid) || true
+          fi
+
+  quality-gate:
+    needs: [frontend-test, backend-test, security-scan, docker-build, e2e-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check job results
+        run: |
+          echo "Frontend tests: ${{ needs.frontend-test.result }}"
+          echo "Backend tests: ${{ needs.backend-test.result }}"
+          echo "Security scan: ${{ needs.security-scan.result }}"
+          echo "Docker build: ${{ needs.docker-build.result }}"
+          echo "E2E tests: ${{ needs.e2e-tests.result }}"
+          
+          # Fail if any critical job failed
+          if [[ "${{ needs.frontend-test.result }}" == "failure" ]] || 
+             [[ "${{ needs.backend-test.result }}" == "failure" ]] || 
+             [[ "${{ needs.docker-build.result }}" == "failure" ]] || 
+             [[ "${{ needs.e2e-tests.result }}" == "failure" ]]; then
+            echo "Critical jobs failed. Quality gate not passed."
+            exit 1
+          fi
+          
+          echo "Quality gate passed successfully!"
+
+  deploy-staging:
+    needs: quality-gate
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: staging
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment..."
+          # Add your staging deployment logic here
+
+  deploy-production:
+    needs: quality-gate
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production environment..."
+          # Add your production deployment logic here
+
+  notify:
+    needs: [quality-gate, deploy-staging, deploy-production]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Notify team
+        run: |
+          echo "Notifying team about CI/CD results..."
+          # Add notification logic here (Slack, email, etc.) 
